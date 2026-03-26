@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:media_dl/core/models.dart';
+import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/process_runner.dart';
 import 'package:media_dl/services/ytdlp_output_parser.dart';
@@ -13,14 +14,14 @@ import 'package:media_dl/services/ytdlp_output_parser.dart';
 class DownloadManager extends ChangeNotifier {
   DownloadManager({
     required this.binaryManager,
-    required this.outputDir,
+    required this.settings,
     required this.historyPath,
     ProcessRunner? processRunner,
     this.maxConcurrent = 1,
   }) : _processRunner = processRunner ?? ProcessRunner();
 
   final BinaryManager binaryManager;
-  final String outputDir;
+  final SettingsNotifier settings;
   final String historyPath;
   final int maxConcurrent;
   final ProcessRunner _processRunner;
@@ -220,9 +221,11 @@ class DownloadManager extends ChangeNotifier {
     await _ensureOutputDir();
 
     try {
+      final outDir = settings.outputDir;
+      final template = settings.filenameTemplate;
       final args = [
         '--newline',
-        '-o', '$outputDir/%(title)s.%(ext)s',
+        '-o', '$outDir/$template',
         '--embed-thumbnail',
         '--embed-metadata',
         if (task.formatId != null) ...['-f', task.formatId!],
@@ -301,10 +304,12 @@ class DownloadManager extends ChangeNotifier {
     await _ensureOutputDir();
 
     try {
+      final outDir = settings.outputDir;
+      final template = settings.playlistTemplate;
       final args = [
         '--newline',
         '-o',
-        '$outputDir/%(playlist_title)s/%(playlist_index)s - %(title)s.%(ext)s',
+        '$outDir/$template',
         '--embed-thumbnail',
         '--embed-metadata',
         if (playlist.selectedIndices != null)
@@ -437,7 +442,7 @@ class DownloadManager extends ChangeNotifier {
   }
 
   Future<void> _ensureOutputDir() async {
-    final dir = Directory(outputDir);
+    final dir = Directory(settings.outputDir);
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }

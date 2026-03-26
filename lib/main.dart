@@ -14,13 +14,17 @@ void main() async {
   final appSupportDir = getAppSupportDir();
   await ensureAppDirs(appSupportDir);
 
-  final settings = SettingsNotifier();
+  final settings = SettingsNotifier(
+    settingsPath: '$appSupportDir/settings.json',
+  );
+  await settings.load();
+
   final resolver = BinaryResolver(appSupportDir: appSupportDir);
   final binaryManager = BinaryManager(resolver: resolver);
   final updateChecker = UpdateChecker();
   final downloadManager = DownloadManager(
     binaryManager: binaryManager,
-    outputDir: getDefaultOutputDir(),
+    settings: settings,
     historyPath: '$appSupportDir/download_history.json',
   );
 

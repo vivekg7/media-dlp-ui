@@ -29,6 +29,21 @@ class SettingsPage extends StatelessWidget {
               const _SectionHeader(title: 'Appearance'),
               _ThemeTile(settings: settings),
               const Divider(),
+              const _SectionHeader(title: 'Downloads'),
+              _OutputDirTile(settings: settings),
+              _FilenameTile(
+                label: 'Filename template',
+                value: settings.filenameTemplate,
+                presets: kFilenamePresets,
+                onChanged: settings.setFilenameTemplate,
+              ),
+              _FilenameTile(
+                label: 'Playlist template',
+                value: settings.playlistTemplate,
+                presets: kPlaylistPresets,
+                onChanged: settings.setPlaylistTemplate,
+              ),
+              const Divider(),
               const _SectionHeader(title: 'Tools'),
               _BinaryTile(
                 binaryManager: binaryManager,
@@ -67,6 +82,10 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Theme
+// ---------------------------------------------------------------------------
 
 class _ThemeTile extends StatelessWidget {
   const _ThemeTile({required this.settings});
@@ -111,6 +130,167 @@ class _ThemeTile extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Output directory
+// ---------------------------------------------------------------------------
+
+class _OutputDirTile extends StatelessWidget {
+  const _OutputDirTile({required this.settings});
+
+  final SettingsNotifier settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.folder_outlined),
+      title: const Text('Download directory'),
+      subtitle: Text(
+        settings.outputDir,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.edit),
+        tooltip: 'Change directory',
+        onPressed: () => _editDir(context),
+      ),
+    );
+  }
+
+  void _editDir(BuildContext context) {
+    final controller = TextEditingController(text: settings.outputDir);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Download directory'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: '/path/to/downloads',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) {
+                settings.setOutputDir(value);
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Filename template
+// ---------------------------------------------------------------------------
+
+class _FilenameTile extends StatelessWidget {
+  const _FilenameTile({
+    required this.label,
+    required this.value,
+    required this.presets,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final Map<String, String> presets;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.text_fields),
+      title: Text(label),
+      subtitle: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: IconButton(
+        icon: const Icon(Icons.edit),
+        tooltip: 'Edit template',
+        onPressed: () => _editTemplate(context),
+      ),
+    );
+  }
+
+  void _editTemplate(BuildContext context) {
+    final controller = TextEditingController(text: value);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(label),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: '%(title)s.%(ext)s',
+              ),
+              autofocus: true,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Text('Presets',
+                style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 8),
+            ...presets.entries.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: OutlinedButton(
+                    onPressed: () => controller.text = e.value,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(e.key, style: const TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                )),
+            const SizedBox(height: 12),
+            Text(
+              'Variables: %(title)s, %(ext)s, %(id)s, %(uploader)s, '
+              '%(upload_date)s, %(playlist_title)s, %(playlist_index)s',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final val = controller.text.trim();
+              if (val.isNotEmpty) onChanged(val);
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Binary / yt-dlp
+// ---------------------------------------------------------------------------
+
 class _BinaryTile extends StatefulWidget {
   const _BinaryTile({
     required this.binaryManager,
@@ -151,7 +331,9 @@ class _BinaryTileState extends State<_BinaryTile> {
       children: [
         ListTile(
           leading: Icon(
-            info.isAvailable ? Icons.check_circle_outline : Icons.error_outline,
+            info.isAvailable
+                ? Icons.check_circle_outline
+                : Icons.error_outline,
             color: info.isAvailable
                 ? theme.colorScheme.primary
                 : theme.colorScheme.error,
@@ -230,7 +412,8 @@ class _BinaryTileState extends State<_BinaryTile> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: Row(
           children: [
-            Icon(Icons.new_releases, size: 18, color: theme.colorScheme.primary),
+            Icon(Icons.new_releases,
+                size: 18, color: theme.colorScheme.primary),
             const SizedBox(width: 8),
             Text(
               'Update available: v${result.latestVersion}',
