@@ -9,6 +9,7 @@ import 'package:media_dl/services/process_runner.dart';
 import 'package:media_dl/services/ytdlp_output_parser.dart';
 
 /// Manages downloads with queuing, concurrency control, and persistence.
+/// Supports both single-video and playlist downloads.
 class DownloadManager extends ChangeNotifier {
   DownloadManager({
     required this.binaryManager,
@@ -25,17 +26,19 @@ class DownloadManager extends ChangeNotifier {
   final ProcessRunner _processRunner;
   final YtDlpOutputParser _parser = YtDlpOutputParser();
 
-  final List<DownloadTask> _tasks = [];
-  List<DownloadTask> get tasks => List.unmodifiable(_tasks);
+  final List<DownloadEntry> _entries = [];
+  List<DownloadEntry> get entries => List.unmodifiable(_entries);
 
-  final Map<DownloadTask, RunningProcess> _activeProcesses = {};
+  final Map<DownloadEntry, RunningProcess> _activeProcesses = {};
   int get _activeCount =>
-      _tasks.where((t) => t.status == DownloadStatus.downloading).length;
+      _entries.where((e) => e.status == DownloadStatus.downloading).length;
 
-  /// Whether yt-dlp is available for downloads.
   bool get isReady => binaryManager.ytDlp.isAvailable;
 
-  /// Load download history from disk.
+  // ---------------------------------------------------------------------------
+  // History persistence
+  // ---------------------------------------------------------------------------
+
   Future<void> loadHistory() async {
     final file = File(historyPath);
     if (!await file.exists()) return;
@@ -43,14 +46,13 @@ class DownloadManager extends ChangeNotifier {
       final json = jsonDecode(await file.readAsString());
       final list = (json as List).cast<Map<String, dynamic>>();
       for (final item in list) {
-        final task = DownloadTask.fromJson(item);
-        // Restore only finished tasks; in-progress ones become failed
-        if (task.status == DownloadStatus.downloading ||
-            task.status == DownloadStatus.queued) {
-          task.status = DownloadStatus.failed;
-          task.error = 'Interrupted by app restart';
+        final entry = DownloadEntry.fromJson(item);
+        if (entry.status == DownloadStatus.downloading ||
+            entry.status == DownloadStatus.queued) {
+          entry.status = DownloadStatus.failed;
+          entry.error = 'Interrupted by app restart';
         }
-        _tasks.add(task);
+        _entries.add(entry);
       }
       notifyListeners();
     } catch (e) {
@@ -58,103 +60,164 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
-  /// Persist download history to disk.
   Future<void> _saveHistory() async {
     try {
-      final json = _tasks.map((t) => t.toJson()).toList();
+      final json = _entries.map((e) => e.toJson()).toList();
       await File(historyPath).writeAsString(jsonEncode(json));
     } catch (e) {
       debugPrint('Failed to save history: $e');
     }
   }
 
-  /// Add a URL to the queue. Starts immediately if slots are available.
-  /// Optionally specify a [formatId] to download a specific format.
-  /// Returns null on success, or an error string if the download can't start.
+  // ---------------------------------------------------------------------------
+  // Single download
+  // ---------------------------------------------------------------------------
+
   Future<String?> download(String url, {String? formatId}) async {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
-
-    if (!isReady) {
-      return 'yt-dlp not found. Check Settings → Tools.';
-    }
+    if (!isReady) return 'yt-dlp not found. Check Settings → Tools.';
 
     final task = DownloadTask(url: trimmed, formatId: formatId);
-    _tasks.insert(0, task);
+    _entries.insert(0, task);
     notifyListeners();
     _saveHistory();
-
     _processQueue();
     return null;
   }
 
-  /// Retry a failed or cancelled download.
-  void retry(DownloadTask task) {
-    if (task.status == DownloadStatus.failed ||
-        task.status == DownloadStatus.cancelled) {
-      task.status = DownloadStatus.queued;
-      task.error = null;
-      task.progress = null;
+  // ---------------------------------------------------------------------------
+  // Playlist download
+  // ---------------------------------------------------------------------------
+
+  Future<String?> downloadPlaylist({
+    required String url,
+    required String playlistTitle,
+    String? uploader,
+    required List<PlaylistEntry> selectedEntries,
+    String? formatId,
+  }) async {
+    if (!isReady) return 'yt-dlp not found. Check Settings → Tools.';
+    if (selectedEntries.isEmpty) return 'No items selected.';
+
+    final items = selectedEntries.map((e) => DownloadTask(
+          url: e.url,
+          fileName: e.title,
+        )).toList();
+
+    final indices = selectedEntries.map((e) => e.index).toList();
+
+    final task = PlaylistDownloadTask(
+      playlistUrl: url,
+      playlistTitle: playlistTitle,
+      uploader: uploader,
+      items: items,
+      formatId: formatId,
+      selectedIndices: indices,
+    );
+
+    _entries.insert(0, task);
+    notifyListeners();
+    _saveHistory();
+    _processQueue();
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Queue control
+  // ---------------------------------------------------------------------------
+
+  void retry(DownloadEntry entry) {
+    if (entry.status == DownloadStatus.failed ||
+        entry.status == DownloadStatus.cancelled) {
+      entry.status = DownloadStatus.queued;
+      entry.error = null;
+      if (entry case DownloadTask task) {
+        task.progress = null;
+      } else if (entry case PlaylistDownloadTask playlist) {
+        playlist.currentItemIndex = 0;
+        for (final item in playlist.items) {
+          if (item.status != DownloadStatus.completed) {
+            item.status = DownloadStatus.queued;
+            item.progress = null;
+            item.error = null;
+          }
+        }
+      }
       notifyListeners();
       _processQueue();
     }
   }
 
-  /// Cancel an active or queued download.
-  void cancel(DownloadTask task) {
-    if (task.status == DownloadStatus.downloading) {
-      _activeProcesses[task]?.kill();
-      _activeProcesses.remove(task);
-      task.status = DownloadStatus.cancelled;
+  void cancel(DownloadEntry entry) {
+    if (entry.status == DownloadStatus.downloading) {
+      _activeProcesses[entry]?.kill();
+      _activeProcesses.remove(entry);
+      entry.status = DownloadStatus.cancelled;
+      // Mark in-progress child items as cancelled too
+      if (entry case PlaylistDownloadTask playlist) {
+        for (final item in playlist.items) {
+          if (item.isActive) item.status = DownloadStatus.cancelled;
+        }
+      }
       notifyListeners();
       _saveHistory();
       _processQueue();
-    } else if (task.status == DownloadStatus.queued) {
-      task.status = DownloadStatus.cancelled;
+    } else if (entry.status == DownloadStatus.queued) {
+      entry.status = DownloadStatus.cancelled;
       notifyListeners();
       _saveHistory();
     }
   }
 
-  /// Remove a finished task from the list.
-  void remove(DownloadTask task) {
-    if (!task.isActive) {
-      _tasks.remove(task);
+  void remove(DownloadEntry entry) {
+    if (!entry.isActive) {
+      _entries.remove(entry);
       notifyListeners();
       _saveHistory();
     }
   }
 
-  /// Clear all completed downloads from the list.
   void clearCompleted() {
-    _tasks.removeWhere((t) => t.status == DownloadStatus.completed);
+    _entries.removeWhere((e) => e.status == DownloadStatus.completed);
     notifyListeners();
     _saveHistory();
   }
 
-  /// Start queued downloads up to the concurrency limit.
+  // ---------------------------------------------------------------------------
+  // Queue processing
+  // ---------------------------------------------------------------------------
+
   void _processQueue() {
     final binaryPath = binaryManager.ytDlp.path;
     if (binaryPath == null) return;
 
     while (_activeCount < maxConcurrent) {
-      final next = _tasks.cast<DownloadTask?>().firstWhere(
-            (t) => t!.status == DownloadStatus.queued,
+      final next = _entries.cast<DownloadEntry?>().firstWhere(
+            (e) => e!.status == DownloadStatus.queued,
             orElse: () => null,
           );
       if (next == null) break;
-      _runDownload(next, binaryPath);
+
+      switch (next) {
+        case DownloadTask task:
+          _runSingleDownload(task, binaryPath);
+        case PlaylistDownloadTask playlist:
+          _runPlaylistDownload(playlist, binaryPath);
+      }
     }
   }
 
-  Future<void> _runDownload(DownloadTask task, String binaryPath) async {
+  // ---------------------------------------------------------------------------
+  // Single download execution
+  // ---------------------------------------------------------------------------
+
+  Future<void> _runSingleDownload(
+      DownloadTask task, String binaryPath) async {
     task.status = DownloadStatus.downloading;
     notifyListeners();
 
-    final dir = Directory(outputDir);
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
+    await _ensureOutputDir();
 
     try {
       final args = [
@@ -169,10 +232,10 @@ class DownloadManager extends ChangeNotifier {
       _activeProcesses[task] = process;
 
       final stdoutSub = process.stdout.listen((line) {
-        _handleLine(task, line);
+        _handleSingleLine(task, line);
       });
       final stderrSub = process.stderr.listen((line) {
-        _handleLine(task, line);
+        _handleSingleLine(task, line);
       });
 
       final exitCode = await process.exitCode;
@@ -199,31 +262,184 @@ class DownloadManager extends ChangeNotifier {
     _processQueue();
   }
 
-  void _handleLine(DownloadTask task, String line) {
+  void _handleSingleLine(DownloadTask task, String line) {
     final parsed = _parser.parseLine(line);
-
     switch (parsed.type) {
       case ParsedLineType.progress:
         task.progress = parsed.progress;
         notifyListeners();
       case ParsedLineType.destination:
         task.outputPath = parsed.destinationPath;
-        final path = parsed.destinationPath;
-        if (path != null) {
-          task.fileName = path.split(Platform.pathSeparator).last;
+        if (parsed.destinationPath != null) {
+          task.fileName =
+              parsed.destinationPath!.split(Platform.pathSeparator).last;
         }
         notifyListeners();
       case ParsedLineType.alreadyDownloaded:
         task.outputPath = parsed.destinationPath;
-        final path = parsed.destinationPath;
-        if (path != null) {
-          task.fileName = path.split(Platform.pathSeparator).last;
+        if (parsed.destinationPath != null) {
+          task.fileName =
+              parsed.destinationPath!.split(Platform.pathSeparator).last;
         }
         notifyListeners();
       case ParsedLineType.error:
         task.error = parsed.message;
       default:
         break;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Playlist download execution
+  // ---------------------------------------------------------------------------
+
+  Future<void> _runPlaylistDownload(
+      PlaylistDownloadTask playlist, String binaryPath) async {
+    playlist.status = DownloadStatus.downloading;
+    notifyListeners();
+
+    await _ensureOutputDir();
+
+    try {
+      final args = [
+        '--newline',
+        '-o',
+        '$outputDir/%(playlist_title)s/%(playlist_index)s - %(title)s.%(ext)s',
+        '--embed-thumbnail',
+        '--embed-metadata',
+        if (playlist.selectedIndices != null)
+          ...['--playlist-items', playlist.selectedIndices!.join(',')],
+        if (playlist.formatId != null) ...['-f', playlist.formatId!],
+        playlist.playlistUrl,
+      ];
+
+      final process = await _processRunner.start(binaryPath, args);
+      _activeProcesses[playlist] = process;
+
+      // Track which child item we're on (0-based into playlist.items)
+      playlist.currentItemIndex = 0;
+      if (playlist.items.isNotEmpty) {
+        playlist.items[0].status = DownloadStatus.downloading;
+      }
+
+      final stdoutSub = process.stdout.listen((line) {
+        _handlePlaylistLine(playlist, line);
+      });
+      final stderrSub = process.stderr.listen((line) {
+        _handlePlaylistLine(playlist, line);
+      });
+
+      final exitCode = await process.exitCode;
+      await stdoutSub.cancel();
+      await stderrSub.cancel();
+      _activeProcesses.remove(playlist);
+
+      if (playlist.status == DownloadStatus.cancelled) return;
+
+      if (exitCode == 0) {
+        // Mark any remaining items as completed
+        for (final item in playlist.items) {
+          if (item.status == DownloadStatus.downloading) {
+            item.status = DownloadStatus.completed;
+            item.progress = const DownloadProgress(percent: 100.0);
+          }
+        }
+        playlist.status = DownloadStatus.completed;
+      } else {
+        // Mark unfinished items as failed
+        for (final item in playlist.items) {
+          if (item.isActive) {
+            item.status = DownloadStatus.failed;
+            item.error ??= 'yt-dlp exited with code $exitCode';
+          }
+        }
+        playlist.status = playlist.items.any(
+                (i) => i.status == DownloadStatus.completed)
+            ? DownloadStatus.completed
+            : DownloadStatus.failed;
+        playlist.error ??= 'yt-dlp exited with code $exitCode';
+      }
+    } catch (e) {
+      playlist.status = DownloadStatus.failed;
+      playlist.error = e.toString();
+    }
+
+    notifyListeners();
+    _saveHistory();
+    _processQueue();
+  }
+
+  void _handlePlaylistLine(PlaylistDownloadTask playlist, String line) {
+    final parsed = _parser.parseLine(line);
+    final currentItem = playlist.currentItemIndex < playlist.items.length
+        ? playlist.items[playlist.currentItemIndex]
+        : null;
+
+    switch (parsed.type) {
+      case ParsedLineType.playlistItem:
+        // Advance to next item. "Downloading item X of Y" means item X
+        // (1-based sequential number). Map to 0-based index.
+        final newIndex = (parsed.playlistItemIndex ?? 1) - 1;
+
+        // Mark previous item as completed if it was downloading
+        if (playlist.currentItemIndex < playlist.items.length) {
+          final prev = playlist.items[playlist.currentItemIndex];
+          if (prev.status == DownloadStatus.downloading) {
+            prev.status = DownloadStatus.completed;
+            prev.progress = const DownloadProgress(percent: 100.0);
+          }
+        }
+
+        playlist.currentItemIndex = newIndex;
+        if (newIndex < playlist.items.length) {
+          playlist.items[newIndex].status = DownloadStatus.downloading;
+        }
+        notifyListeners();
+
+      case ParsedLineType.progress:
+        if (currentItem != null) {
+          currentItem.progress = parsed.progress;
+          notifyListeners();
+        }
+
+      case ParsedLineType.destination:
+        if (currentItem != null) {
+          currentItem.outputPath = parsed.destinationPath;
+          if (parsed.destinationPath != null) {
+            currentItem.fileName =
+                parsed.destinationPath!.split(Platform.pathSeparator).last;
+          }
+          notifyListeners();
+        }
+
+      case ParsedLineType.alreadyDownloaded:
+        if (currentItem != null) {
+          currentItem.outputPath = parsed.destinationPath;
+          if (parsed.destinationPath != null) {
+            currentItem.fileName =
+                parsed.destinationPath!.split(Platform.pathSeparator).last;
+          }
+          currentItem.status = DownloadStatus.completed;
+          currentItem.progress = const DownloadProgress(percent: 100.0);
+          notifyListeners();
+        }
+
+      case ParsedLineType.error:
+        if (currentItem != null) {
+          currentItem.error = parsed.message;
+          currentItem.status = DownloadStatus.failed;
+          notifyListeners();
+        }
+
+      default:
+        break;
+    }
+  }
+
+  Future<void> _ensureOutputDir() async {
+    final dir = Directory(outputDir);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
     }
   }
 }

@@ -7,8 +7,30 @@ enum DownloadStatus {
   cancelled,
 }
 
-/// A single download task tracked by the DownloadManager.
-class DownloadTask {
+// ---------------------------------------------------------------------------
+// Download entries (sealed base for single + playlist)
+// ---------------------------------------------------------------------------
+
+/// Base type for items in the download list.
+sealed class DownloadEntry {
+  DownloadStatus get status;
+  set status(DownloadStatus value);
+  DateTime get createdAt;
+  String? get error;
+  set error(String? value);
+  bool get isActive;
+  Map<String, dynamic> toJson();
+
+  static DownloadEntry fromJson(Map<String, dynamic> json) {
+    if (json['type'] == 'playlist') {
+      return PlaylistDownloadTask.fromJson(json);
+    }
+    return DownloadTask.fromJson(json);
+  }
+}
+
+/// A single download task.
+class DownloadTask extends DownloadEntry {
   DownloadTask({
     required this.url,
     this.formatId,
@@ -22,17 +44,23 @@ class DownloadTask {
 
   final String url;
   final String? formatId;
+  @override
   final DateTime createdAt;
+  @override
   DownloadStatus status;
   DownloadProgress? progress;
   String? fileName;
   String? outputPath;
+  @override
   String? error;
 
+  @override
   bool get isActive =>
       status == DownloadStatus.queued || status == DownloadStatus.downloading;
 
+  @override
   Map<String, dynamic> toJson() => {
+        'type': 'single',
         'url': url,
         'formatId': formatId,
         'status': status.name,
@@ -52,6 +80,159 @@ class DownloadTask {
         createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
       );
 }
+
+// ---------------------------------------------------------------------------
+// Playlist models
+// ---------------------------------------------------------------------------
+
+/// A single entry in a playlist listing (from --flat-playlist).
+class PlaylistEntry {
+  const PlaylistEntry({
+    required this.id,
+    required this.title,
+    required this.url,
+    this.duration,
+    this.thumbnailUrl,
+    required this.index,
+  });
+
+  final String id;
+  final String title;
+  final String url;
+  final double? duration;
+  final String? thumbnailUrl;
+
+  /// 1-based index within the playlist.
+  final int index;
+
+  String get durationString {
+    if (duration == null) return '';
+    final total = duration!.toInt();
+    final m = total ~/ 60;
+    final s = total % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  factory PlaylistEntry.fromJson(Map<String, dynamic> json, int index) {
+    final id = json['id']?.toString() ?? '';
+    final url = json['url'] as String? ?? json['webpage_url'] as String? ?? '';
+    return PlaylistEntry(
+      id: id,
+      title: json['title'] as String? ?? 'Item $index',
+      url: url,
+      duration: (json['duration'] as num?)?.toDouble(),
+      thumbnailUrl: json['thumbnail'] as String?,
+      index: index,
+    );
+  }
+}
+
+/// Metadata about a playlist extracted via yt-dlp --flat-playlist.
+class PlaylistInfo {
+  const PlaylistInfo({
+    required this.title,
+    this.uploader,
+    required this.entries,
+  });
+
+  final String title;
+  final String? uploader;
+  final List<PlaylistEntry> entries;
+  int get itemCount => entries.length;
+}
+
+/// A playlist download task containing child tasks for each selected item.
+class PlaylistDownloadTask extends DownloadEntry {
+  PlaylistDownloadTask({
+    required this.playlistUrl,
+    required this.playlistTitle,
+    this.uploader,
+    required this.items,
+    this.formatId,
+    this.selectedIndices,
+    this.status = DownloadStatus.queued,
+    this.error,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  final String playlistUrl;
+  final String playlistTitle;
+  final String? uploader;
+  final String? formatId;
+
+  /// 1-based playlist indices that were selected.
+  final List<int>? selectedIndices;
+
+  final List<DownloadTask> items;
+
+  @override
+  final DateTime createdAt;
+  @override
+  DownloadStatus status;
+  @override
+  String? error;
+
+  /// Index of the item currently being downloaded (0-based into [items]).
+  int currentItemIndex = 0;
+
+  int get completedCount =>
+      items.where((t) => t.status == DownloadStatus.completed).length;
+  int get totalCount => items.length;
+
+  double get overallPercent {
+    if (items.isEmpty) return 0;
+    double sum = 0;
+    for (final item in items) {
+      if (item.status == DownloadStatus.completed) {
+        sum += 100;
+      } else if (item.progress != null) {
+        sum += item.progress!.percent;
+      }
+    }
+    return sum / items.length;
+  }
+
+  @override
+  bool get isActive =>
+      status == DownloadStatus.queued || status == DownloadStatus.downloading;
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'playlist',
+        'playlistUrl': playlistUrl,
+        'playlistTitle': playlistTitle,
+        'uploader': uploader,
+        'formatId': formatId,
+        'selectedIndices': selectedIndices,
+        'status': status.name,
+        'error': error,
+        'createdAt': createdAt.toIso8601String(),
+        'items': items.map((t) => t.toJson()).toList(),
+      };
+
+  factory PlaylistDownloadTask.fromJson(Map<String, dynamic> json) {
+    final itemsList = (json['items'] as List?)
+            ?.cast<Map<String, dynamic>>()
+            .map(DownloadTask.fromJson)
+            .toList() ??
+        [];
+    return PlaylistDownloadTask(
+      playlistUrl: json['playlistUrl'] as String,
+      playlistTitle: json['playlistTitle'] as String,
+      uploader: json['uploader'] as String?,
+      formatId: json['formatId'] as String?,
+      selectedIndices: (json['selectedIndices'] as List?)?.cast<int>(),
+      status: DownloadStatus.values.byName(json['status'] as String),
+      error: json['error'] as String?,
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
+      items: itemsList,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Media format & info (for single-video metadata extraction)
+// ---------------------------------------------------------------------------
 
 /// A media format available for download.
 class MediaFormat {
@@ -138,7 +319,9 @@ class MediaInfo {
     final h = total ~/ 3600;
     final m = (total % 3600) ~/ 60;
     final s = total % 60;
-    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    if (h > 0) {
+      return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 
@@ -157,6 +340,10 @@ class MediaInfo {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Parser output types
+// ---------------------------------------------------------------------------
 
 /// Progress data extracted from a yt-dlp download line.
 class DownloadProgress {
@@ -194,6 +381,7 @@ enum ParsedLineType {
   postProcess,
   destination,
   alreadyDownloaded,
+  playlistItem,
   other,
 }
 
@@ -204,6 +392,8 @@ class ParsedLine {
     this.message,
     this.progress,
     this.destinationPath,
+    this.playlistItemIndex,
+    this.playlistItemTotal,
   });
 
   final ParsedLineType type;
@@ -216,6 +406,12 @@ class ParsedLine {
 
   /// Output file path (only for [ParsedLineType.destination] lines).
   final String? destinationPath;
+
+  /// 1-based current item number (only for [ParsedLineType.playlistItem]).
+  final int? playlistItemIndex;
+
+  /// Total item count (only for [ParsedLineType.playlistItem]).
+  final int? playlistItemTotal;
 
   @override
   String toString() => 'ParsedLine($type, $message)';

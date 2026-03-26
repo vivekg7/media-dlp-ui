@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_dl/core/models.dart';
 import 'package:media_dl/features/download/format_sheet.dart';
+import 'package:media_dl/features/download/playlist_sheet.dart';
 import 'package:media_dl/services/download_manager.dart';
 import 'package:media_dl/services/ytdlp_info_extractor.dart';
 
@@ -24,7 +25,7 @@ class _DownloadPageState extends State<DownloadPage> {
 
   DownloadManager get _dm => widget.downloadManager;
 
-  /// Fetch info, show format sheet, then download with selected format.
+  /// Fetch info, auto-detect playlist vs single, show appropriate sheet.
   Future<void> _fetchAndChooseFormat() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
@@ -36,15 +37,30 @@ class _DownloadPageState extends State<DownloadPage> {
 
     setState(() => _fetching = true);
     try {
-      final info = await widget.infoExtractor.extract(url);
+      final result = await widget.infoExtractor.probe(url);
       if (!mounted) return;
 
-      final selection = await showFormatSheet(context, info);
-      if (selection == null || !mounted) return;
-
-      _urlController.clear();
-      final error = await _dm.download(url, formatId: selection.formatId);
-      if (error != null && mounted) _showError(error);
+      if (result.isPlaylist) {
+        final selection =
+            await showPlaylistSheet(context, result.playlistInfo!);
+        if (selection == null || !mounted) return;
+        _urlController.clear();
+        final error = await _dm.downloadPlaylist(
+          url: url,
+          playlistTitle: result.playlistInfo!.title,
+          uploader: result.playlistInfo!.uploader,
+          selectedEntries: selection.selectedEntries,
+          formatId: selection.formatId,
+        );
+        if (error != null && mounted) _showError(error);
+      } else {
+        final selection = await showFormatSheet(context, result.mediaInfo!);
+        if (selection == null || !mounted) return;
+        _urlController.clear();
+        final error =
+            await _dm.download(url, formatId: selection.formatId);
+        if (error != null && mounted) _showError(error);
+      }
     } catch (e) {
       if (mounted) _showError(e.toString());
     } finally {
@@ -101,9 +117,7 @@ class _DownloadPageState extends State<DownloadPage> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.download),
                   label: const Text('Download'),
@@ -121,12 +135,12 @@ class _DownloadPageState extends State<DownloadPage> {
             child: ListenableBuilder(
               listenable: _dm,
               builder: (context, _) {
-                final tasks = _dm.tasks;
-                if (tasks.isEmpty) {
+                final entries = _dm.entries;
+                if (entries.isEmpty) {
                   return const _EmptyState();
                 }
                 final hasCompleted =
-                    tasks.any((t) => t.status == DownloadStatus.completed);
+                    entries.any((e) => e.status == DownloadStatus.completed);
                 return Column(
                   children: [
                     if (hasCompleted)
@@ -143,17 +157,25 @@ class _DownloadPageState extends State<DownloadPage> {
                       ),
                     Expanded(
                       child: ListView.builder(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: tasks.length,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: entries.length,
                         itemBuilder: (context, index) {
-                          final task = tasks[index];
-                          return _DownloadCard(
-                            task: task,
-                            onCancel: () => _dm.cancel(task),
-                            onRetry: () => _dm.retry(task),
-                            onRemove: () => _dm.remove(task),
-                          );
+                          final entry = entries[index];
+                          return switch (entry) {
+                            DownloadTask task => _DownloadCard(
+                                task: task,
+                                onCancel: () => _dm.cancel(task),
+                                onRetry: () => _dm.retry(task),
+                                onRemove: () => _dm.remove(task),
+                              ),
+                            PlaylistDownloadTask playlist =>
+                              _PlaylistCard(
+                                playlist: playlist,
+                                onCancel: () => _dm.cancel(playlist),
+                                onRetry: () => _dm.retry(playlist),
+                                onRemove: () => _dm.remove(playlist),
+                              ),
+                          };
                         },
                       ),
                     ),
@@ -168,6 +190,10 @@ class _DownloadPageState extends State<DownloadPage> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Empty state
+// ---------------------------------------------------------------------------
+
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
@@ -179,20 +205,20 @@ class _EmptyState extends StatelessWidget {
         children: [
           Icon(Icons.download_outlined, size: 64, color: Colors.grey),
           SizedBox(height: 16),
-          Text(
-            'No downloads yet',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
+          Text('No downloads yet',
+              style: TextStyle(fontSize: 16, color: Colors.grey)),
           SizedBox(height: 8),
-          Text(
-            'Paste a URL above to get started',
-            style: TextStyle(fontSize: 14, color: Colors.grey),
-          ),
+          Text('Paste a URL above to get started',
+              style: TextStyle(fontSize: 14, color: Colors.grey)),
         ],
       ),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Single download card
+// ---------------------------------------------------------------------------
 
 class _DownloadCard extends StatelessWidget {
   const _DownloadCard({
@@ -219,10 +245,9 @@ class _DownloadCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title row
             Row(
               children: [
-                _statusIcon(colorScheme),
+                _statusIcon(task.status, colorScheme),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -232,11 +257,9 @@ class _DownloadCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                _actionButton(colorScheme),
+                _actionButtons(task.status),
               ],
             ),
-
-            // Progress bar (only when downloading)
             if (task.status == DownloadStatus.downloading) ...[
               const SizedBox(height: 12),
               LinearProgressIndicator(
@@ -246,21 +269,16 @@ class _DownloadCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               const SizedBox(height: 8),
-              _progressDetails(theme),
+              _progressText(theme, task.progress),
             ],
-
-            // Error message
             if (task.status == DownloadStatus.failed &&
                 task.error != null) ...[
               const SizedBox(height: 8),
-              Text(
-                task.error!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.error,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+              Text(task.error!,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: colorScheme.error),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
             ],
           ],
         ),
@@ -268,45 +286,24 @@ class _DownloadCard extends StatelessWidget {
     );
   }
 
-  Widget _statusIcon(ColorScheme colorScheme) {
-    return switch (task.status) {
-      DownloadStatus.queued =>
-        Icon(Icons.hourglass_empty, color: colorScheme.outline),
-      DownloadStatus.downloading =>
-        Icon(Icons.downloading, color: colorScheme.primary),
-      DownloadStatus.completed =>
-        Icon(Icons.check_circle, color: Colors.green),
-      DownloadStatus.failed =>
-        Icon(Icons.error, color: colorScheme.error),
-      DownloadStatus.cancelled =>
-        Icon(Icons.cancel, color: colorScheme.outline),
-    };
-  }
-
-  Widget _actionButton(ColorScheme colorScheme) {
-    return switch (task.status) {
-      DownloadStatus.queued ||
-      DownloadStatus.downloading =>
-        IconButton(
+  Widget _actionButtons(DownloadStatus status) {
+    return switch (status) {
+      DownloadStatus.queued || DownloadStatus.downloading => IconButton(
           onPressed: onCancel,
           icon: const Icon(Icons.close),
           tooltip: 'Cancel',
         ),
-      DownloadStatus.failed ||
-      DownloadStatus.cancelled =>
-        Row(
+      DownloadStatus.failed || DownloadStatus.cancelled => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Retry',
-            ),
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Retry'),
             IconButton(
-              onPressed: onRemove,
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Remove',
-            ),
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Remove'),
           ],
         ),
       _ => IconButton(
@@ -316,23 +313,269 @@ class _DownloadCard extends StatelessWidget {
         ),
     };
   }
+}
 
-  Widget _progressDetails(ThemeData theme) {
-    final progress = task.progress;
-    if (progress == null) {
-      return Text('Starting...', style: theme.textTheme.bodySmall);
-    }
+// ---------------------------------------------------------------------------
+// Playlist download card
+// ---------------------------------------------------------------------------
 
-    final parts = <String>[
-      '${progress.percent.toStringAsFixed(1)}%',
-    ];
-    if (progress.totalSize != null) parts.add(progress.totalSize!);
-    if (progress.speed != null) parts.add(progress.speed!);
-    if (progress.eta != null) parts.add('ETA ${progress.eta}');
+class _PlaylistCard extends StatefulWidget {
+  const _PlaylistCard({
+    required this.playlist,
+    required this.onCancel,
+    required this.onRetry,
+    required this.onRemove,
+  });
 
-    return Text(
-      parts.join('  ·  '),
-      style: theme.textTheme.bodySmall,
+  final PlaylistDownloadTask playlist;
+  final VoidCallback onCancel;
+  final VoidCallback onRetry;
+  final VoidCallback onRemove;
+
+  @override
+  State<_PlaylistCard> createState() => _PlaylistCardState();
+}
+
+class _PlaylistCardState extends State<_PlaylistCard> {
+  bool _expanded = false;
+
+  PlaylistDownloadTask get pl => widget.playlist;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
+            child: Row(
+              children: [
+                _statusIcon(pl.status, colorScheme),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.playlist_play,
+                              size: 18, color: colorScheme.primary),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              pl.playlistTitle,
+                              style: theme.textTheme.bodyLarge,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${pl.completedCount} of ${pl.totalCount} completed',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _playlistActions(),
+              ],
+            ),
+          ),
+
+          // Overall progress bar
+          if (pl.status == DownloadStatus.downloading) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: LinearProgressIndicator(
+                value: pl.overallPercent / 100.0,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                '${pl.overallPercent.toStringAsFixed(1)}%',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          ],
+
+          // Error message
+          if (pl.status == DownloadStatus.failed && pl.error != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(pl.error!,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: colorScheme.error),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+            ),
+
+          // Expand/collapse button
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _expanded ? 'Hide items' : 'Show items',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    size: 18,
+                    color: colorScheme.primary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Expanded item list
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                children: [
+                  for (final item in pl.items)
+                    _PlaylistItemRow(item: item, theme: theme),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
+
+  Widget _playlistActions() {
+    return switch (pl.status) {
+      DownloadStatus.queued || DownloadStatus.downloading => IconButton(
+          onPressed: widget.onCancel,
+          icon: const Icon(Icons.close),
+          tooltip: 'Cancel',
+        ),
+      DownloadStatus.failed || DownloadStatus.cancelled => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+                onPressed: widget.onRetry,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Retry'),
+            IconButton(
+                onPressed: widget.onRemove,
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Remove'),
+          ],
+        ),
+      _ => IconButton(
+          onPressed: widget.onRemove,
+          icon: const Icon(Icons.delete_outline),
+          tooltip: 'Remove',
+        ),
+    };
+  }
+}
+
+class _PlaylistItemRow extends StatelessWidget {
+  const _PlaylistItemRow({required this.item, required this.theme});
+
+  final DownloadTask item;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 20,
+            child: _statusIcon(item.status, colorScheme, size: 16),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.fileName ?? item.url,
+                  style: theme.textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (item.status == DownloadStatus.downloading &&
+                    item.progress != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: LinearProgressIndicator(
+                      value: item.progress!.percent / 100.0,
+                      borderRadius: BorderRadius.circular(2),
+                      minHeight: 2,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (item.status == DownloadStatus.downloading &&
+              item.progress != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(
+                '${item.progress!.percent.toStringAsFixed(0)}%',
+                style: theme.textTheme.labelSmall,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+Widget _statusIcon(DownloadStatus status, ColorScheme colorScheme,
+    {double size = 24}) {
+  return switch (status) {
+    DownloadStatus.queued =>
+      Icon(Icons.hourglass_empty, color: colorScheme.outline, size: size),
+    DownloadStatus.downloading =>
+      Icon(Icons.downloading, color: colorScheme.primary, size: size),
+    DownloadStatus.completed =>
+      Icon(Icons.check_circle, color: Colors.green, size: size),
+    DownloadStatus.failed =>
+      Icon(Icons.error, color: colorScheme.error, size: size),
+    DownloadStatus.cancelled =>
+      Icon(Icons.cancel, color: colorScheme.outline, size: size),
+  };
+}
+
+Widget _progressText(ThemeData theme, DownloadProgress? progress) {
+  if (progress == null) {
+    return Text('Starting...', style: theme.textTheme.bodySmall);
+  }
+  final parts = <String>['${progress.percent.toStringAsFixed(1)}%'];
+  if (progress.totalSize != null) parts.add(progress.totalSize!);
+  if (progress.speed != null) parts.add(progress.speed!);
+  if (progress.eta != null) parts.add('ETA ${progress.eta}');
+  return Text(parts.join('  ·  '), style: theme.textTheme.bodySmall);
 }

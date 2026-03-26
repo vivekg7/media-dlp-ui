@@ -17,6 +17,11 @@ class YtDlpOutputParser {
     r'\[download\]\s+Destination:\s+(.+)$',
   );
 
+  // [download] Downloading item 3 of 15
+  static final _playlistItemRegex = RegExp(
+    r'\[download\]\s+Downloading item\s+(\d+)\s+of\s+(\d+)',
+  );
+
   // [download] /path/to/file.mp4 has already been downloaded
   static final _alreadyDownloadedRegex = RegExp(
     r'\[download\]\s+(.+)\s+has already been downloaded',
@@ -47,6 +52,17 @@ class YtDlpOutputParser {
     final trimmed = line.trim();
     if (trimmed.isEmpty) {
       return const ParsedLine(type: ParsedLineType.other, message: '');
+    }
+
+    // Playlist item line (must check before progress)
+    final playlistMatch = _playlistItemRegex.firstMatch(trimmed);
+    if (playlistMatch != null) {
+      return ParsedLine(
+        type: ParsedLineType.playlistItem,
+        playlistItemIndex: int.parse(playlistMatch.group(1)!),
+        playlistItemTotal: int.parse(playlistMatch.group(2)!),
+        message: trimmed,
+      );
     }
 
     // Progress line

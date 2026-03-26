@@ -156,6 +156,26 @@ void main() {
     });
   });
 
+  group('playlist item lines', () {
+    test('parses playlist item line', () {
+      final line = '[download] Downloading item 3 of 15';
+      final result = parser.parseLine(line);
+
+      expect(result.type, ParsedLineType.playlistItem);
+      expect(result.playlistItemIndex, 3);
+      expect(result.playlistItemTotal, 15);
+    });
+
+    test('parses playlist item line with single item', () {
+      final line = '[download] Downloading item 1 of 1';
+      final result = parser.parseLine(line);
+
+      expect(result.type, ParsedLineType.playlistItem);
+      expect(result.playlistItemIndex, 1);
+      expect(result.playlistItemTotal, 1);
+    });
+  });
+
   group('info and other lines', () {
     test('parses generic bracketed info line', () {
       final line =
