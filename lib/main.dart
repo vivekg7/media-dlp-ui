@@ -6,6 +6,7 @@ import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/binary_resolver.dart';
 import 'package:media_dl/services/download_manager.dart';
 import 'package:media_dl/services/update_checker.dart';
+import 'package:media_dl/services/ytdlp_info_extractor.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,8 @@ void main() async {
     historyPath: '$appSupportDir/download_history.json',
   );
 
+  final infoExtractor = YtDlpInfoExtractor(binaryManager: binaryManager);
+
   // Detect binaries and load history on startup
   binaryManager.detect();
   downloadManager.loadHistory();
@@ -32,5 +35,6 @@ void main() async {
     binaryManager: binaryManager,
     updateChecker: updateChecker,
     downloadManager: downloadManager,
+    infoExtractor: infoExtractor,
   ));
 }

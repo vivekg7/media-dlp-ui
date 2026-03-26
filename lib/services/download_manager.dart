@@ -69,8 +69,9 @@ class DownloadManager extends ChangeNotifier {
   }
 
   /// Add a URL to the queue. Starts immediately if slots are available.
+  /// Optionally specify a [formatId] to download a specific format.
   /// Returns null on success, or an error string if the download can't start.
-  Future<String?> download(String url) async {
+  Future<String?> download(String url, {String? formatId}) async {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
 
@@ -78,7 +79,7 @@ class DownloadManager extends ChangeNotifier {
       return 'yt-dlp not found. Check Settings → Tools.';
     }
 
-    final task = DownloadTask(url: trimmed);
+    final task = DownloadTask(url: trimmed, formatId: formatId);
     _tasks.insert(0, task);
     notifyListeners();
     _saveHistory();
@@ -156,14 +157,15 @@ class DownloadManager extends ChangeNotifier {
     }
 
     try {
-      final process = await _processRunner.start(
-        binaryPath,
-        [
-          '--newline',
-          '-o', '$outputDir/%(title)s.%(ext)s',
-          task.url,
-        ],
-      );
+      final args = [
+        '--newline',
+        '-o', '$outputDir/%(title)s.%(ext)s',
+        '--embed-thumbnail',
+        '--embed-metadata',
+        if (task.formatId != null) ...['-f', task.formatId!],
+        task.url,
+      ];
+      final process = await _processRunner.start(binaryPath, args);
       _activeProcesses[task] = process;
 
       final stdoutSub = process.stdout.listen((line) {

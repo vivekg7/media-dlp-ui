@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:media_dl/core/models.dart';
+import 'package:media_dl/features/download/format_sheet.dart';
 import 'package:media_dl/services/download_manager.dart';
+import 'package:media_dl/services/ytdlp_info_extractor.dart';
 
 class DownloadPage extends StatefulWidget {
-  const DownloadPage({super.key, required this.downloadManager});
+  const DownloadPage({
+    super.key,
+    required this.downloadManager,
+    required this.infoExtractor,
+  });
 
   final DownloadManager downloadManager;
+  final YtDlpInfoExtractor infoExtractor;
 
   @override
   State<DownloadPage> createState() => _DownloadPageState();
@@ -13,19 +20,51 @@ class DownloadPage extends StatefulWidget {
 
 class _DownloadPageState extends State<DownloadPage> {
   final _urlController = TextEditingController();
+  bool _fetching = false;
 
   DownloadManager get _dm => widget.downloadManager;
 
-  Future<void> _startDownload() async {
+  /// Fetch info, show format sheet, then download with selected format.
+  Future<void> _fetchAndChooseFormat() async {
+    final url = _urlController.text.trim();
+    if (url.isEmpty) return;
+
+    if (!_dm.isReady) {
+      _showError('yt-dlp not found. Check Settings → Tools.');
+      return;
+    }
+
+    setState(() => _fetching = true);
+    try {
+      final info = await widget.infoExtractor.extract(url);
+      if (!mounted) return;
+
+      final selection = await showFormatSheet(context, info);
+      if (selection == null || !mounted) return;
+
+      _urlController.clear();
+      final error = await _dm.download(url, formatId: selection.formatId);
+      if (error != null && mounted) _showError(error);
+    } catch (e) {
+      if (mounted) _showError(e.toString());
+    } finally {
+      if (mounted) setState(() => _fetching = false);
+    }
+  }
+
+  /// Quick download with best format (no info fetch).
+  Future<void> _quickDownload() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
     _urlController.clear();
     final error = await _dm.download(url);
-    if (error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error)),
-      );
-    }
+    if (error != null && mounted) _showError(error);
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -52,14 +91,28 @@ class _DownloadPageState extends State<DownloadPage> {
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.link),
                     ),
-                    onSubmitted: (_) => _startDownload(),
+                    onSubmitted: (_) => _fetchAndChooseFormat(),
                   ),
                 ),
                 const SizedBox(width: 12),
                 FilledButton.icon(
-                  onPressed: _startDownload,
-                  icon: const Icon(Icons.download),
+                  onPressed: _fetching ? null : _fetchAndChooseFormat,
+                  icon: _fetching
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.download),
                   label: const Text('Download'),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  onPressed: _fetching ? null : _quickDownload,
+                  icon: const Icon(Icons.bolt),
+                  tooltip: 'Quick download (best quality)',
                 ),
               ],
             ),

@@ -6,6 +6,7 @@ import 'package:media_dl/features/settings/settings_page.dart';
 import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/download_manager.dart';
 import 'package:media_dl/services/update_checker.dart';
+import 'package:media_dl/services/ytdlp_info_extractor.dart';
 
 class MediaDlApp extends StatelessWidget {
   const MediaDlApp({
@@ -14,12 +15,14 @@ class MediaDlApp extends StatelessWidget {
     required this.binaryManager,
     required this.updateChecker,
     required this.downloadManager,
+    required this.infoExtractor,
   });
 
   final SettingsNotifier settings;
   final BinaryManager binaryManager;
   final UpdateChecker updateChecker;
   final DownloadManager downloadManager;
+  final YtDlpInfoExtractor infoExtractor;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +40,7 @@ class MediaDlApp extends StatelessWidget {
             binaryManager: binaryManager,
             updateChecker: updateChecker,
             downloadManager: downloadManager,
+            infoExtractor: infoExtractor,
           ),
         );
       },
@@ -51,12 +55,14 @@ class AppShell extends StatefulWidget {
     required this.binaryManager,
     required this.updateChecker,
     required this.downloadManager,
+    required this.infoExtractor,
   });
 
   final SettingsNotifier settings;
   final BinaryManager binaryManager;
   final UpdateChecker updateChecker;
   final DownloadManager downloadManager;
+  final YtDlpInfoExtractor infoExtractor;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -71,7 +77,10 @@ class _AppShellState extends State<AppShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          DownloadPage(downloadManager: widget.downloadManager),
+          DownloadPage(
+              downloadManager: widget.downloadManager,
+              infoExtractor: widget.infoExtractor,
+            ),
           SettingsPage(
             settings: widget.settings,
             binaryManager: widget.binaryManager,
