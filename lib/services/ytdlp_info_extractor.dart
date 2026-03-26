@@ -19,10 +19,12 @@ class ExtractResult {
 }
 
 /// Extracts media metadata by running `yt-dlp -j` on a URL.
+/// Caches results in memory so repeated probes for the same URL are instant.
 class YtDlpInfoExtractor {
   YtDlpInfoExtractor({required this.binaryManager});
 
   final BinaryManager binaryManager;
+  final Map<String, ExtractResult> _cache = {};
 
   String get _binaryPath {
     final path = binaryManager.ytDlp.path;
@@ -30,9 +32,15 @@ class YtDlpInfoExtractor {
     return path;
   }
 
+  /// Clear the in-memory cache.
+  void clearCache() => _cache.clear();
+
   /// Probe a URL to determine if it is a playlist or single video,
-  /// and return the appropriate metadata.
+  /// and return the appropriate metadata. Results are cached in memory.
   Future<ExtractResult> probe(String url) async {
+    final cached = _cache[url];
+    if (cached != null) return cached;
+
     // Try flat-playlist first — fast, returns one JSON per entry
     final result = await Process.run(
       _binaryPath,
@@ -52,19 +60,23 @@ class YtDlpInfoExtractor {
 
     final lines = stdout.split('\n').where((l) => l.trim().isNotEmpty).toList();
 
+    final ExtractResult extractResult;
+
     if (lines.length == 1) {
       // Single video — use full metadata extraction
       final json = jsonDecode(lines.first) as Map<String, dynamic>;
-      // If it has formats, it's already full info from flat-playlist on a
-      // single video. Otherwise fall back to full extraction.
       if (json.containsKey('formats')) {
-        return ExtractResult.single(MediaInfo.fromJson(json));
+        extractResult = ExtractResult.single(MediaInfo.fromJson(json));
+      } else {
+        extractResult = ExtractResult.single(await extract(url));
       }
-      return ExtractResult.single(await extract(url));
+    } else {
+      // Multiple entries — it's a playlist
+      extractResult = ExtractResult.playlist(_parsePlaylistLines(lines));
     }
 
-    // Multiple entries — it's a playlist
-    return ExtractResult.playlist(_parsePlaylistLines(lines));
+    _cache[url] = extractResult;
+    return extractResult;
   }
 
   /// Fetch full metadata for a single video URL.
