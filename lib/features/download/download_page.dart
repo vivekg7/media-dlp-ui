@@ -72,16 +72,39 @@ class _DownloadPageState extends State<DownloadPage> {
                 if (tasks.isEmpty) {
                   return const _EmptyState();
                 }
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: tasks.length,
-                  itemBuilder: (context, index) {
-                    return _DownloadCard(
-                      task: tasks[index],
-                      onCancel: () => _dm.cancel(tasks[index]),
-                      onRemove: () => _dm.remove(tasks[index]),
-                    );
-                  },
+                final hasCompleted =
+                    tasks.any((t) => t.status == DownloadStatus.completed);
+                return Column(
+                  children: [
+                    if (hasCompleted)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: _dm.clearCompleted,
+                            icon: const Icon(Icons.clear_all, size: 18),
+                            label: const Text('Clear completed'),
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      child: ListView.builder(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: tasks.length,
+                        itemBuilder: (context, index) {
+                          final task = tasks[index];
+                          return _DownloadCard(
+                            task: task,
+                            onCancel: () => _dm.cancel(task),
+                            onRetry: () => _dm.retry(task),
+                            onRemove: () => _dm.remove(task),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -122,11 +145,13 @@ class _DownloadCard extends StatelessWidget {
   const _DownloadCard({
     required this.task,
     required this.onCancel,
+    required this.onRetry,
     required this.onRemove,
   });
 
   final DownloadTask task;
   final VoidCallback onCancel;
+  final VoidCallback onRetry;
   final VoidCallback onRemove;
 
   @override
@@ -213,6 +238,23 @@ class _DownloadCard extends StatelessWidget {
           onPressed: onCancel,
           icon: const Icon(Icons.close),
           tooltip: 'Cancel',
+        ),
+      DownloadStatus.failed ||
+      DownloadStatus.cancelled =>
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Retry',
+            ),
+            IconButton(
+              onPressed: onRemove,
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Remove',
+            ),
+          ],
         ),
       _ => IconButton(
           onPressed: onRemove,

@@ -16,9 +16,11 @@ class DownloadTask {
     this.fileName,
     this.outputPath,
     this.error,
-  });
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
 
   final String url;
+  final DateTime createdAt;
   DownloadStatus status;
   DownloadProgress? progress;
   String? fileName;
@@ -27,6 +29,24 @@ class DownloadTask {
 
   bool get isActive =>
       status == DownloadStatus.queued || status == DownloadStatus.downloading;
+
+  Map<String, dynamic> toJson() => {
+        'url': url,
+        'status': status.name,
+        'fileName': fileName,
+        'outputPath': outputPath,
+        'error': error,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory DownloadTask.fromJson(Map<String, dynamic> json) => DownloadTask(
+        url: json['url'] as String,
+        status: DownloadStatus.values.byName(json['status'] as String),
+        fileName: json['fileName'] as String?,
+        outputPath: json['outputPath'] as String?,
+        error: json['error'] as String?,
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
+      );
 }
 
 /// Progress data extracted from a yt-dlp download line.

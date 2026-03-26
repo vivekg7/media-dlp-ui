@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -7,60 +8,141 @@ import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/process_runner.dart';
 import 'package:media_dl/services/ytdlp_output_parser.dart';
 
-/// Manages downloads by coordinating ProcessRunner, parser, and task state.
+/// Manages downloads with queuing, concurrency control, and persistence.
 class DownloadManager extends ChangeNotifier {
   DownloadManager({
     required this.binaryManager,
     required this.outputDir,
+    required this.historyPath,
     ProcessRunner? processRunner,
+    this.maxConcurrent = 1,
   }) : _processRunner = processRunner ?? ProcessRunner();
 
   final BinaryManager binaryManager;
   final String outputDir;
+  final String historyPath;
+  final int maxConcurrent;
   final ProcessRunner _processRunner;
   final YtDlpOutputParser _parser = YtDlpOutputParser();
 
   final List<DownloadTask> _tasks = [];
   List<DownloadTask> get tasks => List.unmodifiable(_tasks);
 
-  RunningProcess? _activeProcess;
+  final Map<DownloadTask, RunningProcess> _activeProcesses = {};
+  int get _activeCount =>
+      _tasks.where((t) => t.status == DownloadStatus.downloading).length;
 
   /// Whether yt-dlp is available for downloads.
   bool get isReady => binaryManager.ytDlp.isAvailable;
 
-  /// Add a URL and start downloading immediately.
+  /// Load download history from disk.
+  Future<void> loadHistory() async {
+    final file = File(historyPath);
+    if (!await file.exists()) return;
+    try {
+      final json = jsonDecode(await file.readAsString());
+      final list = (json as List).cast<Map<String, dynamic>>();
+      for (final item in list) {
+        final task = DownloadTask.fromJson(item);
+        // Restore only finished tasks; in-progress ones become failed
+        if (task.status == DownloadStatus.downloading ||
+            task.status == DownloadStatus.queued) {
+          task.status = DownloadStatus.failed;
+          task.error = 'Interrupted by app restart';
+        }
+        _tasks.add(task);
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to load history: $e');
+    }
+  }
+
+  /// Persist download history to disk.
+  Future<void> _saveHistory() async {
+    try {
+      final json = _tasks.map((t) => t.toJson()).toList();
+      await File(historyPath).writeAsString(jsonEncode(json));
+    } catch (e) {
+      debugPrint('Failed to save history: $e');
+    }
+  }
+
+  /// Add a URL to the queue. Starts immediately if slots are available.
   /// Returns null on success, or an error string if the download can't start.
   Future<String?> download(String url) async {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
 
-    final binaryPath = binaryManager.ytDlp.path;
-    if (binaryPath == null) {
+    if (!isReady) {
       return 'yt-dlp not found. Check Settings → Tools.';
     }
 
     final task = DownloadTask(url: trimmed);
     _tasks.insert(0, task);
     notifyListeners();
+    _saveHistory();
 
-    await _runDownload(task, binaryPath);
+    _processQueue();
     return null;
   }
 
-  /// Cancel the currently active download.
-  void cancel(DownloadTask task) {
-    if (task.status == DownloadStatus.downloading) {
-      _activeProcess?.kill();
-      task.status = DownloadStatus.cancelled;
+  /// Retry a failed or cancelled download.
+  void retry(DownloadTask task) {
+    if (task.status == DownloadStatus.failed ||
+        task.status == DownloadStatus.cancelled) {
+      task.status = DownloadStatus.queued;
+      task.error = null;
+      task.progress = null;
       notifyListeners();
+      _processQueue();
     }
   }
 
-  /// Remove a completed/failed/cancelled task from the list.
+  /// Cancel an active or queued download.
+  void cancel(DownloadTask task) {
+    if (task.status == DownloadStatus.downloading) {
+      _activeProcesses[task]?.kill();
+      _activeProcesses.remove(task);
+      task.status = DownloadStatus.cancelled;
+      notifyListeners();
+      _saveHistory();
+      _processQueue();
+    } else if (task.status == DownloadStatus.queued) {
+      task.status = DownloadStatus.cancelled;
+      notifyListeners();
+      _saveHistory();
+    }
+  }
+
+  /// Remove a finished task from the list.
   void remove(DownloadTask task) {
     if (!task.isActive) {
       _tasks.remove(task);
       notifyListeners();
+      _saveHistory();
+    }
+  }
+
+  /// Clear all completed downloads from the list.
+  void clearCompleted() {
+    _tasks.removeWhere((t) => t.status == DownloadStatus.completed);
+    notifyListeners();
+    _saveHistory();
+  }
+
+  /// Start queued downloads up to the concurrency limit.
+  void _processQueue() {
+    final binaryPath = binaryManager.ytDlp.path;
+    if (binaryPath == null) return;
+
+    while (_activeCount < maxConcurrent) {
+      final next = _tasks.cast<DownloadTask?>().firstWhere(
+            (t) => t!.status == DownloadStatus.queued,
+            orElse: () => null,
+          );
+      if (next == null) break;
+      _runDownload(next, binaryPath);
     }
   }
 
@@ -68,7 +150,6 @@ class DownloadManager extends ChangeNotifier {
     task.status = DownloadStatus.downloading;
     notifyListeners();
 
-    // Ensure output directory exists
     final dir = Directory(outputDir);
     if (!await dir.exists()) {
       await dir.create(recursive: true);
@@ -78,19 +159,16 @@ class DownloadManager extends ChangeNotifier {
       final process = await _processRunner.start(
         binaryPath,
         [
-          '--newline', // Force progress on new lines (not carriage return)
+          '--newline',
           '-o', '$outputDir/%(title)s.%(ext)s',
           task.url,
         ],
       );
-      _activeProcess = process;
+      _activeProcesses[task] = process;
 
-      // Listen to stdout for progress
       final stdoutSub = process.stdout.listen((line) {
         _handleLine(task, line);
       });
-
-      // Listen to stderr (yt-dlp writes some output here)
       final stderrSub = process.stderr.listen((line) {
         _handleLine(task, line);
       });
@@ -98,12 +176,9 @@ class DownloadManager extends ChangeNotifier {
       final exitCode = await process.exitCode;
       await stdoutSub.cancel();
       await stderrSub.cancel();
-      _activeProcess = null;
+      _activeProcesses.remove(task);
 
-      if (task.status == DownloadStatus.cancelled) {
-        // Already marked cancelled by cancel()
-        return;
-      }
+      if (task.status == DownloadStatus.cancelled) return;
 
       if (exitCode == 0) {
         task.status = DownloadStatus.completed;
@@ -118,6 +193,8 @@ class DownloadManager extends ChangeNotifier {
     }
 
     notifyListeners();
+    _saveHistory();
+    _processQueue();
   }
 
   void _handleLine(DownloadTask task, String line) {
@@ -129,7 +206,6 @@ class DownloadManager extends ChangeNotifier {
         notifyListeners();
       case ParsedLineType.destination:
         task.outputPath = parsed.destinationPath;
-        // Extract filename from path
         final path = parsed.destinationPath;
         if (path != null) {
           task.fileName = path.split(Platform.pathSeparator).last;
@@ -144,9 +220,6 @@ class DownloadManager extends ChangeNotifier {
         notifyListeners();
       case ParsedLineType.error:
         task.error = parsed.message;
-      case ParsedLineType.merging:
-        // Keep showing progress during merge
-        break;
       default:
         break;
     }

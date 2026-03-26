@@ -20,10 +20,12 @@ void main() async {
   final downloadManager = DownloadManager(
     binaryManager: binaryManager,
     outputDir: getDefaultOutputDir(),
+    historyPath: '$appSupportDir/download_history.json',
   );
 
-  // Detect binaries on startup
+  // Detect binaries and load history on startup
   binaryManager.detect();
+  downloadManager.loadHistory();
 
   runApp(MediaDlApp(
     settings: settings,
