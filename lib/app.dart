@@ -3,11 +3,20 @@ import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/core/theme.dart';
 import 'package:media_dl/features/download/download_page.dart';
 import 'package:media_dl/features/settings/settings_page.dart';
+import 'package:media_dl/services/binary_manager.dart';
+import 'package:media_dl/services/update_checker.dart';
 
 class MediaDlApp extends StatelessWidget {
-  const MediaDlApp({super.key, required this.settings});
+  const MediaDlApp({
+    super.key,
+    required this.settings,
+    required this.binaryManager,
+    required this.updateChecker,
+  });
 
   final SettingsNotifier settings;
+  final BinaryManager binaryManager;
+  final UpdateChecker updateChecker;
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +29,11 @@ class MediaDlApp extends StatelessWidget {
           theme: lightTheme,
           darkTheme: darkTheme,
           themeMode: settings.themeMode,
-          home: AppShell(settings: settings),
+          home: AppShell(
+            settings: settings,
+            binaryManager: binaryManager,
+            updateChecker: updateChecker,
+          ),
         );
       },
     );
@@ -28,9 +41,16 @@ class MediaDlApp extends StatelessWidget {
 }
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.settings});
+  const AppShell({
+    super.key,
+    required this.settings,
+    required this.binaryManager,
+    required this.updateChecker,
+  });
 
   final SettingsNotifier settings;
+  final BinaryManager binaryManager;
+  final UpdateChecker updateChecker;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -46,7 +66,11 @@ class _AppShellState extends State<AppShell> {
         index: _currentIndex,
         children: [
           const DownloadPage(),
-          SettingsPage(settings: widget.settings),
+          SettingsPage(
+            settings: widget.settings,
+            binaryManager: widget.binaryManager,
+            updateChecker: widget.updateChecker,
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
