@@ -1,3 +1,34 @@
+/// Status of a download task.
+enum DownloadStatus {
+  queued,
+  downloading,
+  completed,
+  failed,
+  cancelled,
+}
+
+/// A single download task tracked by the DownloadManager.
+class DownloadTask {
+  DownloadTask({
+    required this.url,
+    this.status = DownloadStatus.queued,
+    this.progress,
+    this.fileName,
+    this.outputPath,
+    this.error,
+  });
+
+  final String url;
+  DownloadStatus status;
+  DownloadProgress? progress;
+  String? fileName;
+  String? outputPath;
+  String? error;
+
+  bool get isActive =>
+      status == DownloadStatus.queued || status == DownloadStatus.downloading;
+}
+
 /// Progress data extracted from a yt-dlp download line.
 class DownloadProgress {
   const DownloadProgress({

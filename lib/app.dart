@@ -4,6 +4,7 @@ import 'package:media_dl/core/theme.dart';
 import 'package:media_dl/features/download/download_page.dart';
 import 'package:media_dl/features/settings/settings_page.dart';
 import 'package:media_dl/services/binary_manager.dart';
+import 'package:media_dl/services/download_manager.dart';
 import 'package:media_dl/services/update_checker.dart';
 
 class MediaDlApp extends StatelessWidget {
@@ -12,11 +13,13 @@ class MediaDlApp extends StatelessWidget {
     required this.settings,
     required this.binaryManager,
     required this.updateChecker,
+    required this.downloadManager,
   });
 
   final SettingsNotifier settings;
   final BinaryManager binaryManager;
   final UpdateChecker updateChecker;
+  final DownloadManager downloadManager;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +36,7 @@ class MediaDlApp extends StatelessWidget {
             settings: settings,
             binaryManager: binaryManager,
             updateChecker: updateChecker,
+            downloadManager: downloadManager,
           ),
         );
       },
@@ -46,11 +50,13 @@ class AppShell extends StatefulWidget {
     required this.settings,
     required this.binaryManager,
     required this.updateChecker,
+    required this.downloadManager,
   });
 
   final SettingsNotifier settings;
   final BinaryManager binaryManager;
   final UpdateChecker updateChecker;
+  final DownloadManager downloadManager;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -65,7 +71,7 @@ class _AppShellState extends State<AppShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          const DownloadPage(),
+          DownloadPage(downloadManager: widget.downloadManager),
           SettingsPage(
             settings: widget.settings,
             binaryManager: widget.binaryManager,

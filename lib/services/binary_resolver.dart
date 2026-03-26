@@ -25,7 +25,11 @@ class BinaryResolver {
     }
 
     // 2. Fall back to system PATH
-    return _findInPath(name);
+    final fromPath = await _findInPath(name);
+    if (fromPath != null) return fromPath;
+
+    // 3. Check well-known locations (sandboxed apps may not see PATH)
+    return _findInWellKnownPaths(name);
   }
 
   Future<String?> _findInPath(String name) async {
@@ -42,6 +46,25 @@ class BinaryResolver {
       }
     } catch (e) {
       debugPrint('Failed to find $name in PATH: $e');
+    }
+    return null;
+  }
+
+  Future<String?> _findInWellKnownPaths(String name) async {
+    final paths = <String>[];
+    if (Platform.isMacOS) {
+      paths.addAll([
+        '/opt/homebrew/bin/$name',
+        '/usr/local/bin/$name',
+      ]);
+    } else if (Platform.isLinux) {
+      paths.addAll([
+        '/usr/local/bin/$name',
+        '/usr/bin/$name',
+      ]);
+    }
+    for (final path in paths) {
+      if (await File(path).exists()) return path;
     }
     return null;
   }

@@ -27,6 +27,21 @@ String getAppSupportDir() {
   throw UnsupportedError('Unsupported platform');
 }
 
+/// Returns the default download output directory.
+String getDefaultOutputDir() {
+  if (Platform.isAndroid) {
+    // App-specific external storage — refined later
+    return '/storage/emulated/0/Download/MediaDL';
+  }
+  final home = Platform.environment['HOME'] ??
+      Platform.environment['USERPROFILE'] ??
+      '.';
+  if (Platform.isWindows) {
+    return '$home\\Downloads\\MediaDL';
+  }
+  return '$home/Downloads/MediaDL';
+}
+
 /// Ensures the app support directory and its bin/ subdirectory exist.
 Future<void> ensureAppDirs(String appSupportDir) async {
   final binDir = Directory('$appSupportDir${Platform.pathSeparator}bin');
