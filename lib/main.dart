@@ -5,6 +5,7 @@ import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/binary_resolver.dart';
 import 'package:media_dl/services/download_manager.dart';
+import 'package:media_dl/services/share_receiver.dart';
 import 'package:media_dl/services/update_checker.dart';
 import 'package:media_dl/services/ytdlp_info_extractor.dart';
 
@@ -33,6 +34,8 @@ void main() async {
     settings: settings,
   );
 
+  final shareReceiver = ShareReceiver();
+
   // Detect binaries and load history on startup
   binaryManager.detect();
   downloadManager.loadHistory();
@@ -43,5 +46,6 @@ void main() async {
     updateChecker: updateChecker,
     downloadManager: downloadManager,
     infoExtractor: infoExtractor,
+    shareReceiver: shareReceiver,
   ));
 }

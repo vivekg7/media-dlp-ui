@@ -3,6 +3,7 @@ import 'package:media_dl/core/models.dart';
 import 'package:media_dl/features/download/format_sheet.dart';
 import 'package:media_dl/features/download/playlist_sheet.dart';
 import 'package:media_dl/services/download_manager.dart';
+import 'package:media_dl/services/share_receiver.dart';
 import 'package:media_dl/services/ytdlp_info_extractor.dart';
 
 class DownloadPage extends StatefulWidget {
@@ -10,10 +11,12 @@ class DownloadPage extends StatefulWidget {
     super.key,
     required this.downloadManager,
     required this.infoExtractor,
+    this.shareReceiver,
   });
 
   final DownloadManager downloadManager;
   final YtDlpInfoExtractor infoExtractor;
+  final ShareReceiver? shareReceiver;
 
   @override
   State<DownloadPage> createState() => _DownloadPageState();
@@ -24,6 +27,29 @@ class _DownloadPageState extends State<DownloadPage> {
   bool _fetching = false;
 
   DownloadManager get _dm => widget.downloadManager;
+
+  @override
+  void initState() {
+    super.initState();
+    _initShareReceiver();
+  }
+
+  Future<void> _initShareReceiver() async {
+    final receiver = widget.shareReceiver;
+    if (receiver == null) return;
+
+    receiver.onUrlReceived = _handleSharedUrl;
+
+    final initialUrl = await receiver.getInitialUrl();
+    if (initialUrl != null && mounted) {
+      _handleSharedUrl(initialUrl);
+    }
+  }
+
+  void _handleSharedUrl(String url) {
+    _urlController.text = url.trim();
+    _fetchAndChooseFormat();
+  }
 
   /// Fetch info, auto-detect playlist vs single, show appropriate sheet.
   Future<void> _fetchAndChooseFormat() async {

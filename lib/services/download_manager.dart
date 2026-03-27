@@ -295,7 +295,9 @@ class DownloadManager extends ChangeNotifier {
       _activeProcesses.remove(task);
 
       if (task.status == DownloadStatus.cancelled ||
-          task.status == DownloadStatus.paused) return;
+          task.status == DownloadStatus.paused) {
+        return;
+      }
 
       if (exitCode == 0) {
         task.status = DownloadStatus.completed;
@@ -391,7 +393,9 @@ class DownloadManager extends ChangeNotifier {
       _activeProcesses.remove(playlist);
 
       if (playlist.status == DownloadStatus.cancelled ||
-          playlist.status == DownloadStatus.paused) return;
+          playlist.status == DownloadStatus.paused) {
+        return;
+      }
 
       if (exitCode == 0) {
         // Mark any remaining items as completed

@@ -5,6 +5,7 @@ import 'package:media_dl/features/download/download_page.dart';
 import 'package:media_dl/features/settings/settings_page.dart';
 import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/download_manager.dart';
+import 'package:media_dl/services/share_receiver.dart';
 import 'package:media_dl/services/update_checker.dart';
 import 'package:media_dl/services/ytdlp_info_extractor.dart';
 
@@ -16,6 +17,7 @@ class MediaDlApp extends StatelessWidget {
     required this.updateChecker,
     required this.downloadManager,
     required this.infoExtractor,
+    required this.shareReceiver,
   });
 
   final SettingsNotifier settings;
@@ -23,6 +25,7 @@ class MediaDlApp extends StatelessWidget {
   final UpdateChecker updateChecker;
   final DownloadManager downloadManager;
   final YtDlpInfoExtractor infoExtractor;
+  final ShareReceiver shareReceiver;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +44,7 @@ class MediaDlApp extends StatelessWidget {
             updateChecker: updateChecker,
             downloadManager: downloadManager,
             infoExtractor: infoExtractor,
+            shareReceiver: shareReceiver,
           ),
         );
       },
@@ -56,6 +60,7 @@ class AppShell extends StatefulWidget {
     required this.updateChecker,
     required this.downloadManager,
     required this.infoExtractor,
+    required this.shareReceiver,
   });
 
   final SettingsNotifier settings;
@@ -63,6 +68,7 @@ class AppShell extends StatefulWidget {
   final UpdateChecker updateChecker;
   final DownloadManager downloadManager;
   final YtDlpInfoExtractor infoExtractor;
+  final ShareReceiver shareReceiver;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -80,6 +86,7 @@ class _AppShellState extends State<AppShell> {
           DownloadPage(
               downloadManager: widget.downloadManager,
               infoExtractor: widget.infoExtractor,
+              shareReceiver: widget.shareReceiver,
             ),
           SettingsPage(
             settings: widget.settings,
