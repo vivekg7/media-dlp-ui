@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:media_dl/core/models.dart';
 import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/services/binary_manager.dart';
+import 'package:media_dl/services/notification_service.dart';
 import 'package:media_dl/services/process_runner.dart';
 import 'package:media_dl/services/ytdlp_output_parser.dart';
 
@@ -17,14 +18,17 @@ class DownloadManager extends ChangeNotifier {
     required this.settings,
     required this.historyPath,
     ProcessRunner? processRunner,
+    NotificationService? notificationService,
     this.maxConcurrent = 1,
-  }) : _processRunner = processRunner ?? ProcessRunner();
+  })  : _processRunner = processRunner ?? ProcessRunner(),
+        _notifications = notificationService ?? NotificationService();
 
   final BinaryManager binaryManager;
   final SettingsNotifier settings;
   final String historyPath;
   final int maxConcurrent;
   final ProcessRunner _processRunner;
+  final NotificationService _notifications;
   final YtDlpOutputParser _parser = YtDlpOutputParser();
 
   final List<DownloadEntry> _entries = [];
@@ -250,13 +254,16 @@ class DownloadManager extends ChangeNotifier {
       if (exitCode == 0) {
         task.status = DownloadStatus.completed;
         task.progress = const DownloadProgress(percent: 100.0);
+        _notifications.downloadComplete(task.fileName ?? task.url);
       } else {
         task.status = DownloadStatus.failed;
         task.error ??= 'yt-dlp exited with code $exitCode';
+        _notifications.downloadFailed(task.fileName ?? task.url, task.error);
       }
     } catch (e) {
       task.status = DownloadStatus.failed;
       task.error = e.toString();
+      _notifications.downloadFailed(task.fileName ?? task.url, task.error);
     }
 
     notifyListeners();
@@ -348,6 +355,8 @@ class DownloadManager extends ChangeNotifier {
           }
         }
         playlist.status = DownloadStatus.completed;
+        _notifications.downloadComplete(
+            '${playlist.playlistTitle} (${playlist.completedCount} items)');
       } else {
         // Mark unfinished items as failed
         for (final item in playlist.items) {
@@ -361,10 +370,13 @@ class DownloadManager extends ChangeNotifier {
             ? DownloadStatus.completed
             : DownloadStatus.failed;
         playlist.error ??= 'yt-dlp exited with code $exitCode';
+        _notifications.downloadFailed(
+            playlist.playlistTitle, playlist.error);
       }
     } catch (e) {
       playlist.status = DownloadStatus.failed;
       playlist.error = e.toString();
+      _notifications.downloadFailed(playlist.playlistTitle, playlist.error);
     }
 
     notifyListeners();

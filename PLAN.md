@@ -135,7 +135,7 @@ Prioritized by impact. Items from PROJECT_SCOPE.md.
 
 ### Medium Priority
 
-- [ ] **Notifications** — download complete/failed desktop + Android notifications
+- [x] **Notifications** — desktop notifications on download complete/failed (macOS, Linux, Windows)
 - [ ] **Share intent handling (Android)** — receive URLs from other apps
 - [ ] **Network settings** — proxy, rate limiting, source address
 - [ ] **Binary auto-update** — download + replace from GitHub Releases (check already exists)
