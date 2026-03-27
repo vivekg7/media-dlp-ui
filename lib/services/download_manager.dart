@@ -226,9 +226,7 @@ class DownloadManager extends ChangeNotifier {
       final args = [
         '--newline',
         '-o', '$outDir/$template',
-        '--embed-thumbnail',
-        '--embed-metadata',
-        ..._cookieArgs,
+        ..._settingsArgs,
         if (task.formatId != null) ...['-f', task.formatId!],
         task.url,
       ];
@@ -311,9 +309,7 @@ class DownloadManager extends ChangeNotifier {
         '--newline',
         '-o',
         '$outDir/$template',
-        '--embed-thumbnail',
-        '--embed-metadata',
-        ..._cookieArgs,
+        ..._settingsArgs,
         if (playlist.selectedIndices != null)
           ...['--playlist-items', playlist.selectedIndices!.join(',')],
         if (playlist.formatId != null) ...['-f', playlist.formatId!],
@@ -443,11 +439,24 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
-  /// Returns cookie args if a cookie file is configured.
-  List<String> get _cookieArgs {
-    final path = settings.cookieFilePath;
-    if (path == null) return const [];
-    return ['--cookies', path];
+  /// Returns common args from settings (post-processing, cookies).
+  List<String> get _settingsArgs {
+    return [
+      if (settings.embedThumbnail) '--embed-thumbnail',
+      if (settings.embedMetadata) '--embed-metadata',
+      if (settings.embedSubs) ...[
+        '--embed-subs',
+        '--sub-langs', settings.subLangs,
+      ],
+      if (settings.sponsorBlock) '--sponsorblock-remove',
+      if (settings.extractAudio) ...[
+        '-x',
+        '--audio-format', settings.audioFormat,
+      ],
+      if (settings.cookieFilePath != null) ...[
+        '--cookies', settings.cookieFilePath!,
+      ],
+    ];
   }
 
   Future<void> _ensureOutputDir() async {

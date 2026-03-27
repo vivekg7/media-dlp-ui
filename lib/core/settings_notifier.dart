@@ -19,6 +19,12 @@ const kFilenamePresets = <String, String>{
   'Upload date - Title': '%(upload_date)s - %(title)s.%(ext)s',
 };
 
+/// Audio format options for extraction.
+const kAudioFormats = ['mp3', 'opus', 'flac', 'aac', 'm4a', 'wav'];
+
+/// Subtitle language presets.
+const kSubtitleLangPresets = ['en', 'en,es', 'en,fr', 'en,de', 'en,ja', 'all'];
+
 const kPlaylistPresets = <String, String>{
   'Playlist folder / Index - Title':
       '%(playlist_title)s/%(playlist_index)s - %(title)s.%(ext)s',
@@ -39,11 +45,28 @@ class SettingsNotifier extends ChangeNotifier {
   String _playlistTemplate = kDefaultPlaylistTemplate;
   String? _cookieFilePath;
 
+  // Post-processing
+  bool _embedThumbnail = true;
+  bool _embedMetadata = true;
+  bool _embedSubs = false;
+  String _subLangs = 'en';
+  bool _sponsorBlock = false;
+  bool _extractAudio = false;
+  String _audioFormat = 'mp3';
+
   ThemeMode get themeMode => _themeMode;
   String get outputDir => _outputDir;
   String get filenameTemplate => _filenameTemplate;
   String get playlistTemplate => _playlistTemplate;
   String? get cookieFilePath => _cookieFilePath;
+
+  bool get embedThumbnail => _embedThumbnail;
+  bool get embedMetadata => _embedMetadata;
+  bool get embedSubs => _embedSubs;
+  String get subLangs => _subLangs;
+  bool get sponsorBlock => _sponsorBlock;
+  bool get extractAudio => _extractAudio;
+  String get audioFormat => _audioFormat;
 
   void setThemeMode(ThemeMode mode) {
     if (_themeMode == mode) return;
@@ -73,6 +96,55 @@ class SettingsNotifier extends ChangeNotifier {
     _save();
   }
 
+  void setEmbedThumbnail(bool value) {
+    if (_embedThumbnail == value) return;
+    _embedThumbnail = value;
+    notifyListeners();
+    _save();
+  }
+
+  void setEmbedMetadata(bool value) {
+    if (_embedMetadata == value) return;
+    _embedMetadata = value;
+    notifyListeners();
+    _save();
+  }
+
+  void setEmbedSubs(bool value) {
+    if (_embedSubs == value) return;
+    _embedSubs = value;
+    notifyListeners();
+    _save();
+  }
+
+  void setSubLangs(String value) {
+    if (_subLangs == value) return;
+    _subLangs = value;
+    notifyListeners();
+    _save();
+  }
+
+  void setSponsorBlock(bool value) {
+    if (_sponsorBlock == value) return;
+    _sponsorBlock = value;
+    notifyListeners();
+    _save();
+  }
+
+  void setExtractAudio(bool value) {
+    if (_extractAudio == value) return;
+    _extractAudio = value;
+    notifyListeners();
+    _save();
+  }
+
+  void setAudioFormat(String value) {
+    if (_audioFormat == value) return;
+    _audioFormat = value;
+    notifyListeners();
+    _save();
+  }
+
   void setCookieFilePath(String? path) {
     final value = (path != null && path.trim().isEmpty) ? null : path;
     if (_cookieFilePath == value) return;
@@ -97,6 +169,13 @@ class SettingsNotifier extends ChangeNotifier {
       _playlistTemplate =
           json['playlistTemplate'] as String? ?? kDefaultPlaylistTemplate;
       _cookieFilePath = json['cookieFilePath'] as String?;
+      _embedThumbnail = json['embedThumbnail'] as bool? ?? true;
+      _embedMetadata = json['embedMetadata'] as bool? ?? true;
+      _embedSubs = json['embedSubs'] as bool? ?? false;
+      _subLangs = json['subLangs'] as String? ?? 'en';
+      _sponsorBlock = json['sponsorBlock'] as bool? ?? false;
+      _extractAudio = json['extractAudio'] as bool? ?? false;
+      _audioFormat = json['audioFormat'] as String? ?? 'mp3';
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to load settings: $e');
@@ -111,6 +190,13 @@ class SettingsNotifier extends ChangeNotifier {
         'filenameTemplate': _filenameTemplate,
         'playlistTemplate': _playlistTemplate,
         'cookieFilePath': _cookieFilePath,
+        'embedThumbnail': _embedThumbnail,
+        'embedMetadata': _embedMetadata,
+        'embedSubs': _embedSubs,
+        'subLangs': _subLangs,
+        'sponsorBlock': _sponsorBlock,
+        'extractAudio': _extractAudio,
+        'audioFormat': _audioFormat,
       };
       await File(settingsPath).writeAsString(jsonEncode(json));
     } catch (e) {

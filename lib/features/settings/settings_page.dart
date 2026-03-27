@@ -44,6 +44,46 @@ class SettingsPage extends StatelessWidget {
                 onChanged: settings.setPlaylistTemplate,
               ),
               const Divider(),
+              const _SectionHeader(title: 'Post-Processing'),
+              SwitchListTile(
+                secondary: const Icon(Icons.image_outlined),
+                title: const Text('Embed thumbnail'),
+                subtitle: const Text('Add cover art to downloaded files'),
+                value: settings.embedThumbnail,
+                onChanged: (v) => settings.setEmbedThumbnail(v),
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.label_outlined),
+                title: const Text('Embed metadata'),
+                subtitle: const Text('Add title, artist, date tags'),
+                value: settings.embedMetadata,
+                onChanged: (v) => settings.setEmbedMetadata(v),
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.subtitles_outlined),
+                title: const Text('Embed subtitles'),
+                value: settings.embedSubs,
+                onChanged: (v) => settings.setEmbedSubs(v),
+              ),
+              if (settings.embedSubs)
+                _SubLangsTile(settings: settings),
+              SwitchListTile(
+                secondary: const Icon(Icons.block),
+                title: const Text('SponsorBlock'),
+                subtitle:
+                    const Text('Remove sponsor segments from videos'),
+                value: settings.sponsorBlock,
+                onChanged: (v) => settings.setSponsorBlock(v),
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.music_note_outlined),
+                title: const Text('Extract audio only'),
+                value: settings.extractAudio,
+                onChanged: (v) => settings.setExtractAudio(v),
+              ),
+              if (settings.extractAudio)
+                _AudioFormatTile(settings: settings),
+              const Divider(),
               const _SectionHeader(title: 'Authentication'),
               _CookieTile(settings: settings),
               const Divider(),
@@ -130,6 +170,115 @@ class _ThemeTile extends StatelessWidget {
       ThemeMode.light => 'Light',
       ThemeMode.dark => 'Dark',
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subtitle languages
+// ---------------------------------------------------------------------------
+
+class _SubLangsTile extends StatelessWidget {
+  const _SubLangsTile({required this.settings});
+
+  final SettingsNotifier settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const SizedBox(width: 24),
+      title: const Text('Subtitle languages'),
+      subtitle: Text(settings.subLangs),
+      trailing: IconButton(
+        icon: const Icon(Icons.edit),
+        tooltip: 'Edit languages',
+        onPressed: () => _editLangs(context),
+      ),
+    );
+  }
+
+  void _editLangs(BuildContext context) {
+    final controller = TextEditingController(text: settings.subLangs);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Subtitle languages'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'en',
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: kSubtitleLangPresets
+                  .map((lang) => ActionChip(
+                        label: Text(lang),
+                        onPressed: () => controller.text = lang,
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Comma-separated language codes. Use "all" for all available.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final val = controller.text.trim();
+              if (val.isNotEmpty) settings.setSubLangs(val);
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Audio format
+// ---------------------------------------------------------------------------
+
+class _AudioFormatTile extends StatelessWidget {
+  const _AudioFormatTile({required this.settings});
+
+  final SettingsNotifier settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const SizedBox(width: 24),
+      title: const Text('Audio format'),
+      trailing: DropdownButton<String>(
+        value: settings.audioFormat,
+        underline: const SizedBox.shrink(),
+        onChanged: (v) {
+          if (v != null) settings.setAudioFormat(v);
+        },
+        items: kAudioFormats
+            .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+            .toList(),
+      ),
+    );
   }
 }
 
