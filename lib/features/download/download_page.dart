@@ -165,6 +165,8 @@ class _DownloadPageState extends State<DownloadPage> {
                             DownloadTask task => _DownloadCard(
                                 task: task,
                                 onCancel: () => _dm.cancel(task),
+                                onPause: () => _dm.pause(task),
+                                onResume: () => _dm.resume(task),
                                 onRetry: () => _dm.retry(task),
                                 onRemove: () => _dm.remove(task),
                               ),
@@ -172,6 +174,8 @@ class _DownloadPageState extends State<DownloadPage> {
                               _PlaylistCard(
                                 playlist: playlist,
                                 onCancel: () => _dm.cancel(playlist),
+                                onPause: () => _dm.pause(playlist),
+                                onResume: () => _dm.resume(playlist),
                                 onRetry: () => _dm.retry(playlist),
                                 onRemove: () => _dm.remove(playlist),
                               ),
@@ -224,12 +228,16 @@ class _DownloadCard extends StatelessWidget {
   const _DownloadCard({
     required this.task,
     required this.onCancel,
+    required this.onPause,
+    required this.onResume,
     required this.onRetry,
     required this.onRemove,
   });
 
   final DownloadTask task;
   final VoidCallback onCancel;
+  final VoidCallback onPause;
+  final VoidCallback onResume;
   final VoidCallback onRetry;
   final VoidCallback onRemove;
 
@@ -260,7 +268,8 @@ class _DownloadCard extends StatelessWidget {
                 _actionButtons(task.status),
               ],
             ),
-            if (task.status == DownloadStatus.downloading) ...[
+            if (task.status == DownloadStatus.downloading ||
+                task.status == DownloadStatus.paused) ...[
               const SizedBox(height: 12),
               LinearProgressIndicator(
                 value: task.progress != null
@@ -269,7 +278,10 @@ class _DownloadCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               const SizedBox(height: 8),
-              _progressText(theme, task.progress),
+              task.status == DownloadStatus.paused
+                  ? Text('Paused${task.progress != null ? '  ·  ${task.progress!.percent.toStringAsFixed(1)}%' : ''}',
+                      style: theme.textTheme.bodySmall)
+                  : _progressText(theme, task.progress),
             ],
             if (task.status == DownloadStatus.failed &&
                 task.error != null) ...[
@@ -288,10 +300,36 @@ class _DownloadCard extends StatelessWidget {
 
   Widget _actionButtons(DownloadStatus status) {
     return switch (status) {
-      DownloadStatus.queued || DownloadStatus.downloading => IconButton(
+      DownloadStatus.downloading => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+                onPressed: onPause,
+                icon: const Icon(Icons.pause),
+                tooltip: 'Pause'),
+            IconButton(
+                onPressed: onCancel,
+                icon: const Icon(Icons.close),
+                tooltip: 'Cancel'),
+          ],
+        ),
+      DownloadStatus.queued => IconButton(
           onPressed: onCancel,
           icon: const Icon(Icons.close),
           tooltip: 'Cancel',
+        ),
+      DownloadStatus.paused => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+                onPressed: onResume,
+                icon: const Icon(Icons.play_arrow),
+                tooltip: 'Resume'),
+            IconButton(
+                onPressed: onCancel,
+                icon: const Icon(Icons.close),
+                tooltip: 'Cancel'),
+          ],
         ),
       DownloadStatus.failed || DownloadStatus.cancelled => Row(
           mainAxisSize: MainAxisSize.min,
@@ -323,12 +361,16 @@ class _PlaylistCard extends StatefulWidget {
   const _PlaylistCard({
     required this.playlist,
     required this.onCancel,
+    required this.onPause,
+    required this.onResume,
     required this.onRetry,
     required this.onRemove,
   });
 
   final PlaylistDownloadTask playlist;
   final VoidCallback onCancel;
+  final VoidCallback onPause;
+  final VoidCallback onResume;
   final VoidCallback onRetry;
   final VoidCallback onRemove;
 
@@ -392,7 +434,8 @@ class _PlaylistCardState extends State<_PlaylistCard> {
           ),
 
           // Overall progress bar
-          if (pl.status == DownloadStatus.downloading) ...[
+          if (pl.status == DownloadStatus.downloading ||
+              pl.status == DownloadStatus.paused) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: LinearProgressIndicator(
@@ -403,7 +446,9 @@ class _PlaylistCardState extends State<_PlaylistCard> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Text(
-                '${pl.overallPercent.toStringAsFixed(1)}%',
+                pl.status == DownloadStatus.paused
+                    ? 'Paused  ·  ${pl.overallPercent.toStringAsFixed(1)}%'
+                    : '${pl.overallPercent.toStringAsFixed(1)}%',
                 style: theme.textTheme.bodySmall,
               ),
             ),
@@ -465,10 +510,36 @@ class _PlaylistCardState extends State<_PlaylistCard> {
 
   Widget _playlistActions() {
     return switch (pl.status) {
-      DownloadStatus.queued || DownloadStatus.downloading => IconButton(
+      DownloadStatus.downloading => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+                onPressed: widget.onPause,
+                icon: const Icon(Icons.pause),
+                tooltip: 'Pause'),
+            IconButton(
+                onPressed: widget.onCancel,
+                icon: const Icon(Icons.close),
+                tooltip: 'Cancel'),
+          ],
+        ),
+      DownloadStatus.queued => IconButton(
           onPressed: widget.onCancel,
           icon: const Icon(Icons.close),
           tooltip: 'Cancel',
+        ),
+      DownloadStatus.paused => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+                onPressed: widget.onResume,
+                icon: const Icon(Icons.play_arrow),
+                tooltip: 'Resume'),
+            IconButton(
+                onPressed: widget.onCancel,
+                icon: const Icon(Icons.close),
+                tooltip: 'Cancel'),
+          ],
         ),
       DownloadStatus.failed || DownloadStatus.cancelled => Row(
           mainAxisSize: MainAxisSize.min,
@@ -521,7 +592,8 @@ class _PlaylistItemRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (item.status == DownloadStatus.downloading &&
+                if ((item.status == DownloadStatus.downloading ||
+                        item.status == DownloadStatus.paused) &&
                     item.progress != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -534,7 +606,8 @@ class _PlaylistItemRow extends StatelessWidget {
               ],
             ),
           ),
-          if (item.status == DownloadStatus.downloading &&
+          if ((item.status == DownloadStatus.downloading ||
+                  item.status == DownloadStatus.paused) &&
               item.progress != null)
             Padding(
               padding: const EdgeInsets.only(left: 8),
@@ -560,6 +633,8 @@ Widget _statusIcon(DownloadStatus status, ColorScheme colorScheme,
       Icon(Icons.hourglass_empty, color: colorScheme.outline, size: size),
     DownloadStatus.downloading =>
       Icon(Icons.downloading, color: colorScheme.primary, size: size),
+    DownloadStatus.paused =>
+      Icon(Icons.pause_circle, color: colorScheme.tertiary, size: size),
     DownloadStatus.completed =>
       Icon(Icons.check_circle, color: Colors.green, size: size),
     DownloadStatus.failed =>

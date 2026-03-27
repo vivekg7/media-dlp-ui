@@ -54,8 +54,8 @@ class DownloadManager extends ChangeNotifier {
         final entry = DownloadEntry.fromJson(item);
         if (entry.status == DownloadStatus.downloading ||
             entry.status == DownloadStatus.queued) {
-          entry.status = DownloadStatus.failed;
-          entry.error = 'Interrupted by app restart';
+          entry.status = DownloadStatus.paused;
+          entry.error = null;
         }
         _entries.add(entry);
       }
@@ -139,6 +139,8 @@ class DownloadManager extends ChangeNotifier {
       entry.error = null;
       if (entry case DownloadTask task) {
         task.progress = null;
+        task.fileName = null;
+        task.outputPath = null;
       } else if (entry case PlaylistDownloadTask playlist) {
         playlist.currentItemIndex = 0;
         for (final item in playlist.items) {
@@ -150,6 +152,40 @@ class DownloadManager extends ChangeNotifier {
         }
       }
       notifyListeners();
+      _processQueue();
+    }
+  }
+
+  void pause(DownloadEntry entry) {
+    if (entry.status == DownloadStatus.downloading) {
+      _activeProcesses[entry]?.kill();
+      _activeProcesses.remove(entry);
+      entry.status = DownloadStatus.paused;
+      if (entry case PlaylistDownloadTask playlist) {
+        for (final item in playlist.items) {
+          if (item.status == DownloadStatus.downloading) {
+            item.status = DownloadStatus.paused;
+          }
+        }
+      }
+      notifyListeners();
+      _saveHistory();
+      _processQueue();
+    }
+  }
+
+  void resume(DownloadEntry entry) {
+    if (entry.status == DownloadStatus.paused) {
+      entry.status = DownloadStatus.queued;
+      if (entry case PlaylistDownloadTask playlist) {
+        for (final item in playlist.items) {
+          if (item.status == DownloadStatus.paused) {
+            item.status = DownloadStatus.queued;
+          }
+        }
+      }
+      notifyListeners();
+      _saveHistory();
       _processQueue();
     }
   }
@@ -168,8 +204,17 @@ class DownloadManager extends ChangeNotifier {
       notifyListeners();
       _saveHistory();
       _processQueue();
-    } else if (entry.status == DownloadStatus.queued) {
+    } else if (entry.status == DownloadStatus.queued ||
+        entry.status == DownloadStatus.paused) {
       entry.status = DownloadStatus.cancelled;
+      if (entry case PlaylistDownloadTask playlist) {
+        for (final item in playlist.items) {
+          if (item.status == DownloadStatus.queued ||
+              item.status == DownloadStatus.paused) {
+            item.status = DownloadStatus.cancelled;
+          }
+        }
+      }
       notifyListeners();
       _saveHistory();
     }
@@ -249,7 +294,8 @@ class DownloadManager extends ChangeNotifier {
       await stderrSub.cancel();
       _activeProcesses.remove(task);
 
-      if (task.status == DownloadStatus.cancelled) return;
+      if (task.status == DownloadStatus.cancelled ||
+          task.status == DownloadStatus.paused) return;
 
       if (exitCode == 0) {
         task.status = DownloadStatus.completed;
@@ -344,7 +390,8 @@ class DownloadManager extends ChangeNotifier {
       await stderrSub.cancel();
       _activeProcesses.remove(playlist);
 
-      if (playlist.status == DownloadStatus.cancelled) return;
+      if (playlist.status == DownloadStatus.cancelled ||
+          playlist.status == DownloadStatus.paused) return;
 
       if (exitCode == 0) {
         // Mark any remaining items as completed

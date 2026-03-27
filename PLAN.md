@@ -131,7 +131,7 @@ Prioritized by impact. Items from PROJECT_SCOPE.md.
 
 - [x] **Cookie file import** — `--cookies` support for age-restricted/private content, configurable in Settings
 - [x] **Post-processing options UI** — SponsorBlock, subtitles, audio extraction, thumbnail/metadata toggles
-- [ ] **Pause/resume** — re-run yt-dlp to resume partial downloads, track temp file state
+- [x] **Pause/resume** — kill process on pause, re-run yt-dlp on resume (auto-continues from .part files)
 
 ### Medium Priority
 
