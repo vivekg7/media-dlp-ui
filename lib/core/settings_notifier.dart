@@ -45,6 +45,11 @@ class SettingsNotifier extends ChangeNotifier {
   String _playlistTemplate = kDefaultPlaylistTemplate;
   String? _cookieFilePath;
 
+  // Network
+  String? _proxyUrl;
+  String? _rateLimit;
+  String? _sourceAddress;
+
   // Post-processing
   bool _embedThumbnail = true;
   bool _embedMetadata = true;
@@ -59,6 +64,10 @@ class SettingsNotifier extends ChangeNotifier {
   String get filenameTemplate => _filenameTemplate;
   String get playlistTemplate => _playlistTemplate;
   String? get cookieFilePath => _cookieFilePath;
+
+  String? get proxyUrl => _proxyUrl;
+  String? get rateLimit => _rateLimit;
+  String? get sourceAddress => _sourceAddress;
 
   bool get embedThumbnail => _embedThumbnail;
   bool get embedMetadata => _embedMetadata;
@@ -145,6 +154,30 @@ class SettingsNotifier extends ChangeNotifier {
     _save();
   }
 
+  void setProxyUrl(String? value) {
+    final v = (value != null && value.trim().isEmpty) ? null : value;
+    if (_proxyUrl == v) return;
+    _proxyUrl = v;
+    notifyListeners();
+    _save();
+  }
+
+  void setRateLimit(String? value) {
+    final v = (value != null && value.trim().isEmpty) ? null : value;
+    if (_rateLimit == v) return;
+    _rateLimit = v;
+    notifyListeners();
+    _save();
+  }
+
+  void setSourceAddress(String? value) {
+    final v = (value != null && value.trim().isEmpty) ? null : value;
+    if (_sourceAddress == v) return;
+    _sourceAddress = v;
+    notifyListeners();
+    _save();
+  }
+
   void setCookieFilePath(String? path) {
     final value = (path != null && path.trim().isEmpty) ? null : path;
     if (_cookieFilePath == value) return;
@@ -169,6 +202,9 @@ class SettingsNotifier extends ChangeNotifier {
       _playlistTemplate =
           json['playlistTemplate'] as String? ?? kDefaultPlaylistTemplate;
       _cookieFilePath = json['cookieFilePath'] as String?;
+      _proxyUrl = json['proxyUrl'] as String?;
+      _rateLimit = json['rateLimit'] as String?;
+      _sourceAddress = json['sourceAddress'] as String?;
       _embedThumbnail = json['embedThumbnail'] as bool? ?? true;
       _embedMetadata = json['embedMetadata'] as bool? ?? true;
       _embedSubs = json['embedSubs'] as bool? ?? false;
@@ -190,6 +226,9 @@ class SettingsNotifier extends ChangeNotifier {
         'filenameTemplate': _filenameTemplate,
         'playlistTemplate': _playlistTemplate,
         'cookieFilePath': _cookieFilePath,
+        'proxyUrl': _proxyUrl,
+        'rateLimit': _rateLimit,
+        'sourceAddress': _sourceAddress,
         'embedThumbnail': _embedThumbnail,
         'embedMetadata': _embedMetadata,
         'embedSubs': _embedSubs,

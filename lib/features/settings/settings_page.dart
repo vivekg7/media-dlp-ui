@@ -87,6 +87,32 @@ class SettingsPage extends StatelessWidget {
               const _SectionHeader(title: 'Authentication'),
               _CookieTile(settings: settings),
               const Divider(),
+              const _SectionHeader(title: 'Network'),
+              _NetworkField(
+                icon: Icons.vpn_lock,
+                label: 'Proxy',
+                hint: 'socks5://127.0.0.1:1080',
+                value: settings.proxyUrl,
+                helpText: 'HTTP/HTTPS/SOCKS proxy URL',
+                onChanged: settings.setProxyUrl,
+              ),
+              _NetworkField(
+                icon: Icons.speed,
+                label: 'Rate limit',
+                hint: '5M',
+                value: settings.rateLimit,
+                helpText: 'e.g. 500K, 5M, 1G (bytes per second)',
+                onChanged: settings.setRateLimit,
+              ),
+              _NetworkField(
+                icon: Icons.lan_outlined,
+                label: 'Source address',
+                hint: '0.0.0.0',
+                value: settings.sourceAddress,
+                helpText: 'Bind to a specific local IP address',
+                onChanged: settings.setSourceAddress,
+              ),
+              const Divider(),
               const _SectionHeader(title: 'Tools'),
               _BinaryTile(
                 binaryManager: binaryManager,
@@ -279,6 +305,104 @@ class _AudioFormatTile extends StatelessWidget {
             .toList(),
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Network field (reusable for proxy, rate limit, source address)
+// ---------------------------------------------------------------------------
+
+class _NetworkField extends StatelessWidget {
+  const _NetworkField({
+    required this.icon,
+    required this.label,
+    required this.hint,
+    required this.value,
+    required this.helpText,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String label;
+  final String hint;
+  final String? value;
+  final String helpText;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSet = value != null;
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(label),
+      subtitle: Text(
+        isSet ? value! : 'Not set',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: isSet ? null : TextStyle(color: Theme.of(context).colorScheme.outline),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            tooltip: 'Edit',
+            onPressed: () => _edit(context),
+          ),
+          if (isSet)
+            IconButton(
+              icon: const Icon(Icons.clear),
+              tooltip: 'Clear',
+              onPressed: () => onChanged(null),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _edit(BuildContext context) {
+    final controller = TextEditingController(text: value ?? '');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(label),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                hintText: hint,
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              helpText,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              onChanged(controller.text);
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose;
   }
 }
 

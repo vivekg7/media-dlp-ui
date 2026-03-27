@@ -468,6 +468,15 @@ class DownloadManager extends ChangeNotifier {
       if (settings.cookieFilePath != null) ...[
         '--cookies', settings.cookieFilePath!,
       ],
+      if (settings.proxyUrl != null) ...[
+        '--proxy', settings.proxyUrl!,
+      ],
+      if (settings.rateLimit != null) ...[
+        '--limit-rate', settings.rateLimit!,
+      ],
+      if (settings.sourceAddress != null) ...[
+        '--source-address', settings.sourceAddress!,
+      ],
     ];
   }
 
