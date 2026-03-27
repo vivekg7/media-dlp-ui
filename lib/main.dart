@@ -21,8 +21,11 @@ void main() async {
   await settings.load();
 
   final resolver = BinaryResolver(appSupportDir: appSupportDir);
-  final binaryManager = BinaryManager(resolver: resolver);
   final updateChecker = UpdateChecker();
+  final binaryManager = BinaryManager(
+    resolver: resolver,
+    updateChecker: updateChecker,
+  );
   final downloadManager = DownloadManager(
     binaryManager: binaryManager,
     settings: settings,

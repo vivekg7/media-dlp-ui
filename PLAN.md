@@ -138,7 +138,7 @@ Prioritized by impact. Items from PROJECT_SCOPE.md.
 - [x] **Notifications** — desktop notifications on download complete/failed (macOS, Linux, Windows)
 - [x] **Share intent handling (Android)** — receive URLs from other apps via MethodChannel
 - [x] **Network settings** — proxy, rate limiting, source address
-- [ ] **Binary auto-update** — download + replace from GitHub Releases (check already exists)
+- [x] **Binary auto-update** — download + replace from GitHub Releases with one-tap update button
 
 ### Lower Priority
 

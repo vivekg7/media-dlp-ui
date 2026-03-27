@@ -7,12 +7,18 @@ class UpdateCheckResult {
     required this.currentVersion,
     this.latestVersion,
     this.downloadUrl,
+    this.assetUrl,
     this.error,
   });
 
   final String currentVersion;
   final String? latestVersion;
+
+  /// HTML release page URL.
   final String? downloadUrl;
+
+  /// Direct download URL for the platform-specific binary asset.
+  final String? assetUrl;
   final String? error;
 
   bool get hasUpdate =>
@@ -53,10 +59,25 @@ class UpdateChecker {
           : tagName;
       final htmlUrl = json['html_url'] as String?;
 
+      // Find platform-specific asset
+      final assets = (json['assets'] as List?) ?? [];
+      final assetName = _platformAssetName(repo);
+      String? assetUrl;
+      if (assetName != null) {
+        for (final asset in assets) {
+          final name = asset['name'] as String? ?? '';
+          if (name == assetName) {
+            assetUrl = asset['browser_download_url'] as String?;
+            break;
+          }
+        }
+      }
+
       return UpdateCheckResult(
         currentVersion: currentVersion,
         latestVersion: latestVersion,
         downloadUrl: htmlUrl,
+        assetUrl: assetUrl,
       );
     } catch (e) {
       return UpdateCheckResult(
@@ -66,5 +87,49 @@ class UpdateChecker {
     } finally {
       client.close();
     }
+  }
+
+  /// Download a file from [url] and save to [destPath].
+  /// Returns null on success, or an error message on failure.
+  Future<String?> downloadBinary(String url, String destPath) async {
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(Uri.parse(url));
+      request.headers.set('User-Agent', 'MediaDL');
+      request.followRedirects = true;
+
+      final response = await request.close();
+      if (response.statusCode != 200) {
+        return 'Download failed: HTTP ${response.statusCode}';
+      }
+
+      final file = File(destPath);
+      await file.parent.create(recursive: true);
+      final sink = file.openWrite();
+      await response.pipe(sink);
+
+      // Set executable permission on Unix platforms
+      if (!Platform.isWindows) {
+        await Process.run('chmod', ['+x', destPath]);
+      }
+
+      return null;
+    } catch (e) {
+      return 'Download failed: $e';
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Returns the expected GitHub Release asset filename for the current
+  /// platform, or null if unsupported.
+  static String? _platformAssetName(String repo) {
+    if (repo == 'yt-dlp/yt-dlp') {
+      if (Platform.isMacOS) return 'yt-dlp_macos';
+      if (Platform.isLinux) return 'yt-dlp_linux';
+      if (Platform.isWindows) return 'yt-dlp.exe';
+      return null;
+    }
+    return null;
   }
 }

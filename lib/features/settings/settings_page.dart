@@ -676,11 +676,13 @@ class _BinaryTile extends StatefulWidget {
 class _BinaryTileState extends State<_BinaryTile> {
   bool _checkingUpdate = false;
   UpdateCheckResult? _updateResult;
+  String? _updateError;
 
   @override
   Widget build(BuildContext context) {
     final info = widget.binaryManager.ytDlp;
     final theme = Theme.of(context);
+    final isUpdating = widget.binaryManager.updating;
 
     if (widget.binaryManager.checking) {
       return const ListTile(
@@ -719,7 +721,7 @@ class _BinaryTileState extends State<_BinaryTile> {
               IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Re-detect',
-                onPressed: () => widget.binaryManager.detect(),
+                onPressed: isUpdating ? null : () => widget.binaryManager.detect(),
               ),
               if (info.isAvailable)
                 _checkingUpdate
@@ -731,12 +733,35 @@ class _BinaryTileState extends State<_BinaryTile> {
                     : IconButton(
                         icon: const Icon(Icons.update),
                         tooltip: 'Check for update',
-                        onPressed: _checkForUpdate,
+                        onPressed: isUpdating ? null : _checkForUpdate,
                       ),
             ],
           ),
         ),
-        if (_updateResult != null) _buildUpdateResult(theme),
+        if (isUpdating)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text('Downloading update...', style: TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+        if (_updateError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(
+              _updateError!,
+              style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
+            ),
+          ),
+        if (!isUpdating && _updateResult != null) _buildUpdateResult(theme),
       ],
     );
   }
@@ -748,6 +773,7 @@ class _BinaryTileState extends State<_BinaryTile> {
     setState(() {
       _checkingUpdate = true;
       _updateResult = null;
+      _updateError = null;
     });
 
     final result = await widget.updateChecker.check(
@@ -759,6 +785,26 @@ class _BinaryTileState extends State<_BinaryTile> {
       setState(() {
         _checkingUpdate = false;
         _updateResult = result;
+      });
+    }
+  }
+
+  Future<void> _installUpdate() async {
+    final assetUrl = _updateResult?.assetUrl;
+    if (assetUrl == null) return;
+
+    setState(() {
+      _updateError = null;
+    });
+
+    final error = await widget.binaryManager.updateYtDlp(assetUrl);
+    if (mounted) {
+      setState(() {
+        if (error != null) {
+          _updateError = error;
+        } else {
+          _updateResult = null;
+        }
       });
     }
   }
@@ -778,20 +824,27 @@ class _BinaryTileState extends State<_BinaryTile> {
 
     if (result.hasUpdate) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
             Icon(Icons.new_releases,
                 size: 18, color: theme.colorScheme.primary),
             const SizedBox(width: 8),
-            Text(
-              'Update available: v${result.latestVersion}',
-              style: TextStyle(
-                color: theme.colorScheme.primary,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+            Expanded(
+              child: Text(
+                'Update available: v${result.latestVersion}',
+                style: TextStyle(
+                  color: theme.colorScheme.primary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
+            if (result.assetUrl != null)
+              FilledButton.tonal(
+                onPressed: _installUpdate,
+                child: const Text('Update'),
+              ),
           ],
         ),
       );
