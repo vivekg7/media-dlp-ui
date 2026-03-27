@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:media_dl/core/models.dart';
+import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/services/binary_manager.dart';
 
 /// Result of probing a URL — either a single video or a playlist.
@@ -21,15 +22,25 @@ class ExtractResult {
 /// Extracts media metadata by running `yt-dlp -j` on a URL.
 /// Caches results in memory so repeated probes for the same URL are instant.
 class YtDlpInfoExtractor {
-  YtDlpInfoExtractor({required this.binaryManager});
+  YtDlpInfoExtractor({
+    required this.binaryManager,
+    required this.settings,
+  });
 
   final BinaryManager binaryManager;
+  final SettingsNotifier settings;
   final Map<String, ExtractResult> _cache = {};
 
   String get _binaryPath {
     final path = binaryManager.ytDlp.path;
     if (path == null) throw Exception('yt-dlp not found');
     return path;
+  }
+
+  List<String> get _cookieArgs {
+    final path = settings.cookieFilePath;
+    if (path == null) return const [];
+    return ['--cookies', path];
   }
 
   /// Clear the in-memory cache.
@@ -44,7 +55,7 @@ class YtDlpInfoExtractor {
     // Try flat-playlist first — fast, returns one JSON per entry
     final result = await Process.run(
       _binaryPath,
-      ['--flat-playlist', '-j', '--no-warnings', url],
+      ['--flat-playlist', '-j', '--no-warnings', ..._cookieArgs, url],
     );
 
     if (result.exitCode != 0) {
@@ -83,7 +94,7 @@ class YtDlpInfoExtractor {
   Future<MediaInfo> extract(String url) async {
     final result = await Process.run(
       _binaryPath,
-      ['-j', '--no-warnings', url],
+      ['-j', '--no-warnings', ..._cookieArgs, url],
     );
 
     if (result.exitCode != 0) {
@@ -105,7 +116,7 @@ class YtDlpInfoExtractor {
   Future<PlaylistInfo> extractPlaylist(String url) async {
     final result = await Process.run(
       _binaryPath,
-      ['--flat-playlist', '-j', '--no-warnings', url],
+      ['--flat-playlist', '-j', '--no-warnings', ..._cookieArgs, url],
     );
 
     if (result.exitCode != 0) {

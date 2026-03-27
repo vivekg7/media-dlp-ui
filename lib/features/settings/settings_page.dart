@@ -44,6 +44,9 @@ class SettingsPage extends StatelessWidget {
                 onChanged: settings.setPlaylistTemplate,
               ),
               const Divider(),
+              const _SectionHeader(title: 'Authentication'),
+              _CookieTile(settings: settings),
+              const Divider(),
               const _SectionHeader(title: 'Tools'),
               _BinaryTile(
                 binaryManager: binaryManager,
@@ -127,6 +130,99 @@ class _ThemeTile extends StatelessWidget {
       ThemeMode.light => 'Light',
       ThemeMode.dark => 'Dark',
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cookie file
+// ---------------------------------------------------------------------------
+
+class _CookieTile extends StatelessWidget {
+  const _CookieTile({required this.settings});
+
+  final SettingsNotifier settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = settings.cookieFilePath;
+    final isSet = path != null;
+
+    return ListTile(
+      leading: Icon(
+        isSet ? Icons.cookie : Icons.cookie_outlined,
+        color: isSet ? Theme.of(context).colorScheme.primary : null,
+      ),
+      title: const Text('Cookie file'),
+      subtitle: Text(
+        isSet ? path : 'Not set — needed for age-restricted or private content',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            tooltip: 'Set cookie file path',
+            onPressed: () => _editPath(context),
+          ),
+          if (isSet)
+            IconButton(
+              icon: const Icon(Icons.clear),
+              tooltip: 'Remove cookie file',
+              onPressed: () => settings.setCookieFilePath(null),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _editPath(BuildContext context) {
+    final controller =
+        TextEditingController(text: settings.cookieFilePath ?? '');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cookie file path'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: '/path/to/cookies.txt',
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Provide a Netscape-format cookies.txt file.\n'
+              'Export from your browser using an extension like '
+              '"Get cookies.txt LOCALLY".',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              settings.setCookieFilePath(controller.text);
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose;
   }
 }
 

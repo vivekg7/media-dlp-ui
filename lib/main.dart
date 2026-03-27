@@ -28,7 +28,10 @@ void main() async {
     historyPath: '$appSupportDir/download_history.json',
   );
 
-  final infoExtractor = YtDlpInfoExtractor(binaryManager: binaryManager);
+  final infoExtractor = YtDlpInfoExtractor(
+    binaryManager: binaryManager,
+    settings: settings,
+  );
 
   // Detect binaries and load history on startup
   binaryManager.detect();

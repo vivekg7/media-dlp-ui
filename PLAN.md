@@ -129,7 +129,7 @@ Prioritized by impact. Items from PROJECT_SCOPE.md.
 
 ### High Priority
 
-- [ ] **Cookie / authentication management** — browser cookie import (`--cookies-from-browser`), cookie file, per-site login
+- [x] **Cookie file import** — `--cookies` support for age-restricted/private content, configurable in Settings
 - [ ] **Post-processing options UI** — SponsorBlock toggle, subtitle download/embed, audio extraction mode
 - [ ] **Pause/resume** — re-run yt-dlp to resume partial downloads, track temp file state
 

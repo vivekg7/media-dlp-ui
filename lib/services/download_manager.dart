@@ -228,6 +228,7 @@ class DownloadManager extends ChangeNotifier {
         '-o', '$outDir/$template',
         '--embed-thumbnail',
         '--embed-metadata',
+        ..._cookieArgs,
         if (task.formatId != null) ...['-f', task.formatId!],
         task.url,
       ];
@@ -312,6 +313,7 @@ class DownloadManager extends ChangeNotifier {
         '$outDir/$template',
         '--embed-thumbnail',
         '--embed-metadata',
+        ..._cookieArgs,
         if (playlist.selectedIndices != null)
           ...['--playlist-items', playlist.selectedIndices!.join(',')],
         if (playlist.formatId != null) ...['-f', playlist.formatId!],
@@ -439,6 +441,13 @@ class DownloadManager extends ChangeNotifier {
       default:
         break;
     }
+  }
+
+  /// Returns cookie args if a cookie file is configured.
+  List<String> get _cookieArgs {
+    final path = settings.cookieFilePath;
+    if (path == null) return const [];
+    return ['--cookies', path];
   }
 
   Future<void> _ensureOutputDir() async {

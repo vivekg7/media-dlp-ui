@@ -37,11 +37,13 @@ class SettingsNotifier extends ChangeNotifier {
   String _outputDir = getDefaultOutputDir();
   String _filenameTemplate = kDefaultFilenameTemplate;
   String _playlistTemplate = kDefaultPlaylistTemplate;
+  String? _cookieFilePath;
 
   ThemeMode get themeMode => _themeMode;
   String get outputDir => _outputDir;
   String get filenameTemplate => _filenameTemplate;
   String get playlistTemplate => _playlistTemplate;
+  String? get cookieFilePath => _cookieFilePath;
 
   void setThemeMode(ThemeMode mode) {
     if (_themeMode == mode) return;
@@ -71,6 +73,14 @@ class SettingsNotifier extends ChangeNotifier {
     _save();
   }
 
+  void setCookieFilePath(String? path) {
+    final value = (path != null && path.trim().isEmpty) ? null : path;
+    if (_cookieFilePath == value) return;
+    _cookieFilePath = value;
+    notifyListeners();
+    _save();
+  }
+
   /// Load settings from disk.
   Future<void> load() async {
     final file = File(settingsPath);
@@ -86,6 +96,7 @@ class SettingsNotifier extends ChangeNotifier {
           json['filenameTemplate'] as String? ?? kDefaultFilenameTemplate;
       _playlistTemplate =
           json['playlistTemplate'] as String? ?? kDefaultPlaylistTemplate;
+      _cookieFilePath = json['cookieFilePath'] as String?;
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to load settings: $e');
@@ -99,6 +110,7 @@ class SettingsNotifier extends ChangeNotifier {
         'outputDir': _outputDir,
         'filenameTemplate': _filenameTemplate,
         'playlistTemplate': _playlistTemplate,
+        'cookieFilePath': _cookieFilePath,
       };
       await File(settingsPath).writeAsString(jsonEncode(json));
     } catch (e) {
