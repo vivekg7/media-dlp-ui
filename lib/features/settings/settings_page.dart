@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/services/binary_manager.dart';
@@ -791,21 +793,27 @@ class _BinaryTileState extends State<_BinaryTile> {
 
   Future<void> _installUpdate() async {
     final assetUrl = _updateResult?.assetUrl;
-    if (assetUrl == null) return;
+    // On Android, assetUrl is null — the native library handles the download.
+    if (assetUrl == null && !Platform.isAndroid) return;
 
     setState(() {
       _updateError = null;
     });
 
-    final error = await widget.binaryManager.updateYtDlp(assetUrl);
+    final error = await widget.binaryManager.updateYtDlp(assetUrl ?? '');
     if (mounted) {
-      setState(() {
-        if (error != null) {
-          _updateError = error;
-        } else {
-          _updateResult = null;
-        }
-      });
+      if (error != null) {
+        setState(() => _updateError = error);
+      } else {
+        setState(() => _updateResult = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'yt-dlp updated to v${widget.binaryManager.ytDlp.version}',
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -840,7 +848,7 @@ class _BinaryTileState extends State<_BinaryTile> {
                 ),
               ),
             ),
-            if (result.assetUrl != null)
+            if (result.assetUrl != null || Platform.isAndroid)
               FilledButton.tonal(
                 onPressed: _installUpdate,
                 child: const Text('Update'),
