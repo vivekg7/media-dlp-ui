@@ -117,7 +117,9 @@ class _DownloadPageState extends State<DownloadPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
       appBar: AppBar(title: const Text('Media DL')),
       body: Column(
         children: [
@@ -216,6 +218,7 @@ class _DownloadPageState extends State<DownloadPage> {
           ),
         ],
       ),
+    ),
     );
   }
 }
