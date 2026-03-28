@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/core/theme.dart';
@@ -80,8 +82,15 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    // Detect binaries after platform channels are ready
-    widget.binaryManager.detect();
+    // Detect binaries after platform channels are ready, then auto-update on Android
+    _initBinaries();
+  }
+
+  Future<void> _initBinaries() async {
+    await widget.binaryManager.detect();
+    if (Platform.isAndroid && widget.binaryManager.ytDlp.isAvailable) {
+      widget.binaryManager.updateYtDlp('');
+    }
   }
 
   @override
