@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/core/theme.dart';
 import 'package:media_dl/features/download/download_page.dart';
-import 'package:media_dl/features/settings/settings_page.dart';
 import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/download_manager.dart';
 import 'package:media_dl/services/share_receiver.dart';
@@ -77,8 +76,6 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  int _currentIndex = 0;
-
   @override
   void initState() {
     super.initState();
@@ -95,40 +92,13 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          DownloadPage(
-              downloadManager: widget.downloadManager,
-              infoExtractor: widget.infoExtractor,
-              shareReceiver: widget.shareReceiver,
-            ),
-          SettingsPage(
-            settings: widget.settings,
-            binaryManager: widget.binaryManager,
-            updateChecker: widget.updateChecker,
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.download_outlined),
-            selectedIcon: Icon(Icons.download),
-            label: 'Downloads',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-      ),
+    return DownloadPage(
+      downloadManager: widget.downloadManager,
+      infoExtractor: widget.infoExtractor,
+      shareReceiver: widget.shareReceiver,
+      settings: widget.settings,
+      binaryManager: widget.binaryManager,
+      updateChecker: widget.updateChecker,
     );
   }
 }

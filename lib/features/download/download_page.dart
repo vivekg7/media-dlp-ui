@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:media_dl/core/models.dart';
+import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/features/download/format_sheet.dart';
 import 'package:media_dl/features/download/playlist_sheet.dart';
+import 'package:media_dl/features/settings/settings_page.dart';
+import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/download_manager.dart';
 import 'package:media_dl/services/share_receiver.dart';
+import 'package:media_dl/services/update_checker.dart';
 import 'package:media_dl/services/ytdlp_info_extractor.dart';
 
 class DownloadPage extends StatefulWidget {
@@ -11,11 +15,17 @@ class DownloadPage extends StatefulWidget {
     super.key,
     required this.downloadManager,
     required this.infoExtractor,
+    required this.settings,
+    required this.binaryManager,
+    required this.updateChecker,
     this.shareReceiver,
   });
 
   final DownloadManager downloadManager;
   final YtDlpInfoExtractor infoExtractor;
+  final SettingsNotifier settings;
+  final BinaryManager binaryManager;
+  final UpdateChecker updateChecker;
   final ShareReceiver? shareReceiver;
 
   @override
@@ -120,7 +130,25 @@ class _DownloadPageState extends State<DownloadPage> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-      appBar: AppBar(title: const Text('Media DL')),
+      appBar: AppBar(
+        title: const Text('Media DL'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SettingsPage(
+                  settings: widget.settings,
+                  binaryManager: widget.binaryManager,
+                  updateChecker: widget.updateChecker,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
