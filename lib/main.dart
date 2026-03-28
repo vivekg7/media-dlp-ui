@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:media_dl/app.dart';
 import 'package:media_dl/core/app_dirs.dart';
 import 'package:media_dl/core/settings_notifier.dart';
+import 'package:media_dl/services/android_process_runner.dart';
 import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/binary_resolver.dart';
 import 'package:media_dl/services/download_manager.dart';
+import 'package:media_dl/services/process_runner.dart';
 import 'package:media_dl/services/share_receiver.dart';
 import 'package:media_dl/services/update_checker.dart';
 import 'package:media_dl/services/ytdlp_info_extractor.dart';
@@ -26,10 +30,13 @@ void main() async {
     resolver: resolver,
     updateChecker: updateChecker,
   );
+  final processRunner =
+      Platform.isAndroid ? AndroidProcessRunner() : ProcessRunner();
   final downloadManager = DownloadManager(
     binaryManager: binaryManager,
     settings: settings,
     historyPath: '$appSupportDir/download_history.json',
+    processRunner: processRunner,
   );
 
   final infoExtractor = YtDlpInfoExtractor(
@@ -39,8 +46,7 @@ void main() async {
 
   final shareReceiver = ShareReceiver();
 
-  // Detect binaries and load history on startup
-  binaryManager.detect();
+  // Load history on startup (detect is triggered after platform channels are ready)
   downloadManager.loadHistory();
 
   runApp(MediaDlApp(

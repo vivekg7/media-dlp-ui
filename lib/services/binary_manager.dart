@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:media_dl/services/binary_resolver.dart';
 import 'package:media_dl/services/update_checker.dart';
 
@@ -26,6 +27,8 @@ class BinaryManager extends ChangeNotifier {
   final BinaryResolver resolver;
   final UpdateChecker updateChecker;
 
+  static const _ytdlpChannel = MethodChannel('com.crylo.media_dl/ytdlp');
+
   BinaryInfo _ytDlp = const BinaryInfo(name: 'yt-dlp');
   BinaryInfo get ytDlp => _ytDlp;
 
@@ -40,19 +43,29 @@ class BinaryManager extends ChangeNotifier {
     _checking = true;
     notifyListeners();
 
-    _ytDlp = await _detectBinary('yt-dlp');
+    if (Platform.isAndroid) {
+      _ytDlp = await _detectAndroidBinary();
+    } else {
+      _ytDlp = await _detectBinary('yt-dlp');
+    }
 
     _checking = false;
     notifyListeners();
   }
 
-  /// Download and install the latest yt-dlp binary from GitHub Releases.
+  /// Download and install the latest yt-dlp binary.
   /// Returns null on success, or an error message on failure.
   Future<String?> updateYtDlp(String assetUrl) async {
     _updating = true;
     notifyListeners();
 
     try {
+      if (Platform.isAndroid) {
+        await _ytdlpChannel.invokeMethod('updateYtDlp');
+        await detect();
+        return null;
+      }
+
       final name = Platform.isWindows ? 'yt-dlp.exe' : 'yt-dlp';
       final destPath =
           '${resolver.appSupportDir}${Platform.pathSeparator}bin${Platform.pathSeparator}$name';
@@ -68,6 +81,43 @@ class BinaryManager extends ChangeNotifier {
     } finally {
       _updating = false;
       notifyListeners();
+    }
+  }
+
+  Future<BinaryInfo> _detectAndroidBinary() async {
+    try {
+      await _ytdlpChannel.invokeMethod('init');
+
+      // Try library's version file first (set after updateYoutubeDL)
+      var version = await _ytdlpChannel.invokeMethod<String>('version');
+
+      // If null (fresh install), get version by running yt-dlp --version
+      if (version == null) {
+        final result = await _ytdlpChannel.invokeMethod<Map>('executeSync', {
+          'arguments': ['--version'],
+        });
+        if (result != null && result['exitCode'] == 0) {
+          version = (result['stdout'] as String?)?.trim();
+        }
+      }
+
+      if (version == null || version.isEmpty) {
+        return const BinaryInfo(
+          name: 'yt-dlp',
+          error: 'yt-dlp initialized but version unknown',
+        );
+      }
+
+      return BinaryInfo(
+        name: 'yt-dlp',
+        path: 'android-embedded',
+        version: version,
+      );
+    } catch (e) {
+      return BinaryInfo(
+        name: 'yt-dlp',
+        error: 'Failed to initialize yt-dlp: $e',
+      );
     }
   }
 

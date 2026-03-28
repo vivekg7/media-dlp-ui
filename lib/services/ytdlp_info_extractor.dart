@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:media_dl/core/models.dart';
 import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/services/binary_manager.dart';
@@ -19,6 +20,18 @@ class ExtractResult {
   final PlaylistInfo? playlistInfo;
 }
 
+class _RunResult {
+  const _RunResult({
+    required this.exitCode,
+    required this.stdout,
+    required this.stderr,
+  });
+
+  final int exitCode;
+  final String stdout;
+  final String stderr;
+}
+
 /// Extracts media metadata by running `yt-dlp -j` on a URL.
 /// Caches results in memory so repeated probes for the same URL are instant.
 class YtDlpInfoExtractor {
@@ -30,6 +43,8 @@ class YtDlpInfoExtractor {
   final BinaryManager binaryManager;
   final SettingsNotifier settings;
   final Map<String, ExtractResult> _cache = {};
+
+  static const _ytdlpChannel = MethodChannel('com.crylo.media_dl/ytdlp');
 
   String get _binaryPath {
     final path = binaryManager.ytDlp.path;
@@ -46,6 +61,27 @@ class YtDlpInfoExtractor {
   /// Clear the in-memory cache.
   void clearCache() => _cache.clear();
 
+  /// Run a yt-dlp command, using the platform channel on Android
+  /// and dart:io Process on desktop.
+  Future<_RunResult> _run(List<String> arguments) async {
+    if (Platform.isAndroid) {
+      final result = await _ytdlpChannel.invokeMethod<Map>('executeSync', {
+        'arguments': arguments,
+      });
+      return _RunResult(
+        exitCode: result!['exitCode'] as int,
+        stdout: result['stdout'] as String? ?? '',
+        stderr: result['stderr'] as String? ?? '',
+      );
+    }
+    final result = await Process.run(_binaryPath, arguments);
+    return _RunResult(
+      exitCode: result.exitCode,
+      stdout: result.stdout as String,
+      stderr: result.stderr as String,
+    );
+  }
+
   /// Probe a URL to determine if it is a playlist or single video,
   /// and return the appropriate metadata. Results are cached in memory.
   Future<ExtractResult> probe(String url) async {
@@ -53,18 +89,17 @@ class YtDlpInfoExtractor {
     if (cached != null) return cached;
 
     // Try flat-playlist first — fast, returns one JSON per entry
-    final result = await Process.run(
-      _binaryPath,
+    final result = await _run(
       ['--flat-playlist', '-j', '--no-warnings', ..._cookieArgs, url],
     );
 
     if (result.exitCode != 0) {
-      final stderr = (result.stderr as String).trim();
+      final stderr = result.stderr.trim();
       throw Exception(
           stderr.isNotEmpty ? stderr : 'yt-dlp exited with code ${result.exitCode}');
     }
 
-    final stdout = (result.stdout as String).trim();
+    final stdout = result.stdout.trim();
     if (stdout.isEmpty) {
       throw Exception('No output from yt-dlp');
     }
@@ -92,18 +127,17 @@ class YtDlpInfoExtractor {
 
   /// Fetch full metadata for a single video URL.
   Future<MediaInfo> extract(String url) async {
-    final result = await Process.run(
-      _binaryPath,
+    final result = await _run(
       ['-j', '--no-warnings', ..._cookieArgs, url],
     );
 
     if (result.exitCode != 0) {
-      final stderr = (result.stderr as String).trim();
+      final stderr = result.stderr.trim();
       throw Exception(
           stderr.isNotEmpty ? stderr : 'yt-dlp exited with code ${result.exitCode}');
     }
 
-    final stdout = (result.stdout as String).trim();
+    final stdout = result.stdout.trim();
     if (stdout.isEmpty) {
       throw Exception('No output from yt-dlp');
     }
@@ -114,18 +148,17 @@ class YtDlpInfoExtractor {
 
   /// Fetch playlist listing via --flat-playlist.
   Future<PlaylistInfo> extractPlaylist(String url) async {
-    final result = await Process.run(
-      _binaryPath,
+    final result = await _run(
       ['--flat-playlist', '-j', '--no-warnings', ..._cookieArgs, url],
     );
 
     if (result.exitCode != 0) {
-      final stderr = (result.stderr as String).trim();
+      final stderr = result.stderr.trim();
       throw Exception(
           stderr.isNotEmpty ? stderr : 'yt-dlp exited with code ${result.exitCode}');
     }
 
-    final stdout = (result.stdout as String).trim();
+    final stdout = result.stdout.trim();
     if (stdout.isEmpty) {
       throw Exception('No output from yt-dlp');
     }

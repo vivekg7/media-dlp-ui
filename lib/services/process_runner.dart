@@ -13,9 +13,29 @@ class ProcessResult {
   final int pid;
 }
 
-/// A running process handle that exposes stdout/stderr streams and cancellation.
-class RunningProcess {
-  RunningProcess._(this._process)
+/// Abstract running process handle that exposes stdout/stderr streams and
+/// cancellation. Both desktop (native) and Android (platform channel)
+/// implementations conform to this interface.
+abstract class RunningProcess {
+  /// Stream of stdout lines.
+  Stream<String> get stdout;
+
+  /// Stream of stderr lines.
+  Stream<String> get stderr;
+
+  /// The OS process ID (or a synthetic ID on Android).
+  int get pid;
+
+  /// Kill the process. Returns true if the signal was successfully delivered.
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]);
+
+  /// Future that completes with the exit code when the process exits.
+  Future<int> get exitCode;
+}
+
+/// Desktop implementation of [RunningProcess] backed by dart:io [Process].
+class NativeRunningProcess extends RunningProcess {
+  NativeRunningProcess(this._process)
       : stdout = _process.stdout
             .transform(const SystemEncoding().decoder)
             .transform(const LineSplitter()),
@@ -25,21 +45,21 @@ class RunningProcess {
 
   final Process _process;
 
-  /// Stream of stdout lines.
+  @override
   final Stream<String> stdout;
 
-  /// Stream of stderr lines.
+  @override
   final Stream<String> stderr;
 
-  /// The OS process ID.
+  @override
   int get pid => _process.pid;
 
-  /// Kill the process. Returns true if the signal was successfully delivered.
+  @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
     return _process.kill(signal);
   }
 
-  /// Future that completes with the exit code when the process exits.
+  @override
   Future<int> get exitCode => _process.exitCode;
 }
 
@@ -58,6 +78,6 @@ class ProcessRunner {
       workingDirectory: workingDirectory,
       environment: environment,
     );
-    return RunningProcess._(process);
+    return NativeRunningProcess(process);
   }
 }

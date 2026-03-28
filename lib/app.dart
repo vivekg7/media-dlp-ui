@@ -78,6 +78,13 @@ class _AppShellState extends State<AppShell> {
   int _currentIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // Detect binaries after platform channels are ready
+    widget.binaryManager.detect();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(

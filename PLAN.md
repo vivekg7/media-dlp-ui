@@ -140,6 +140,10 @@ Prioritized by impact. Items from PROJECT_SCOPE.md.
 - [x] **Network settings** — proxy, rate limiting, source address
 - [x] **Binary auto-update** — download + replace from GitHub Releases with one-tap update button
 
+### Android
+
+- [x] **Android yt-dlp runtime** — youtubedl-android bundles Python + yt-dlp + ffmpeg via platform channels
+
 ### Lower Priority
 
 - [ ] **gallery-dl integration** — secondary tool support per PROJECT_SCOPE.md
@@ -150,11 +154,12 @@ Prioritized by impact. Items from PROJECT_SCOPE.md.
 
 ## Dependency Summary
 
-| Package | Purpose                                                                    | Status                |
-| ------- | -------------------------------------------------------------------------- | --------------------- |
-| None    | Everything uses `dart:io`, `dart:async`, `dart:convert`, Flutter built-ins | ✅ Zero external deps |
+| Package | Purpose | Status |
+| ------- | ------- | ------ |
+| `youtubedl-android` (library + ffmpeg) | Bundles Python + yt-dlp + ffmpeg on Android | ✅ Android only |
+| `kotlinx-coroutines-android` | Background threading for platform channel handlers | ✅ Android only |
 
-`path_provider` and `permission_handler` were avoided by using platform-specific env vars and known paths.
+Desktop still uses zero external Dart/Flutter dependencies. `path_provider` and `permission_handler` were avoided by using platform-specific env vars and known paths.
 
 ---
 
