@@ -340,6 +340,13 @@ class _DownloadCard extends StatelessWidget {
                       style: theme.textTheme.bodySmall)
                   : _progressText(theme, task.progress),
             ],
+            if (task.status == DownloadStatus.completed &&
+                task.fileSize != null) ...[
+              const SizedBox(height: 4),
+              Text(task.fileSize!,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: colorScheme.outline)),
+            ],
             if (task.status == DownloadStatus.failed &&
                 task.error != null) ...[
               const SizedBox(height: 8),

@@ -301,6 +301,7 @@ class DownloadManager extends ChangeNotifier {
 
       if (exitCode == 0) {
         task.status = DownloadStatus.completed;
+        task.fileSize ??= task.progress?.totalSize;
         task.progress = const DownloadProgress(percent: 100.0);
         _notifications.downloadComplete(task.fileName ?? task.url);
       } else {
@@ -402,6 +403,7 @@ class DownloadManager extends ChangeNotifier {
         for (final item in playlist.items) {
           if (item.status == DownloadStatus.downloading) {
             item.status = DownloadStatus.completed;
+            item.fileSize ??= item.progress?.totalSize;
             item.progress = const DownloadProgress(percent: 100.0);
           }
         }
@@ -452,6 +454,7 @@ class DownloadManager extends ChangeNotifier {
           final prev = playlist.items[playlist.currentItemIndex];
           if (prev.status == DownloadStatus.downloading) {
             prev.status = DownloadStatus.completed;
+            prev.fileSize ??= prev.progress?.totalSize;
             prev.progress = const DownloadProgress(percent: 100.0);
           }
         }
@@ -486,6 +489,7 @@ class DownloadManager extends ChangeNotifier {
                 parsed.destinationPath!.split(Platform.pathSeparator).last;
           }
           currentItem.status = DownloadStatus.completed;
+          currentItem.fileSize ??= currentItem.progress?.totalSize;
           currentItem.progress = const DownloadProgress(percent: 100.0);
           notifyListeners();
         }

@@ -39,6 +39,7 @@ class DownloadTask extends DownloadEntry {
     this.progress,
     this.fileName,
     this.outputPath,
+    this.fileSize,
     this.error,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
@@ -52,6 +53,8 @@ class DownloadTask extends DownloadEntry {
   DownloadProgress? progress;
   String? fileName;
   String? outputPath;
+  /// Final file size string, e.g. "150.23MiB".
+  String? fileSize;
   @override
   String? error;
 
@@ -67,6 +70,7 @@ class DownloadTask extends DownloadEntry {
         'status': status.name,
         'fileName': fileName,
         'outputPath': outputPath,
+        'fileSize': fileSize,
         'error': error,
         'createdAt': createdAt.toIso8601String(),
       };
@@ -77,6 +81,7 @@ class DownloadTask extends DownloadEntry {
         status: DownloadStatus.values.byName(json['status'] as String),
         fileName: json['fileName'] as String?,
         outputPath: json['outputPath'] as String?,
+        fileSize: json['fileSize'] as String?,
         error: json['error'] as String?,
         createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
       );
