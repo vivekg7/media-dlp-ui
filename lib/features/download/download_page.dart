@@ -91,7 +91,8 @@ class _DownloadPageState extends State<DownloadPage> {
         );
         if (error != null && mounted) _showError(error);
       } else {
-        final selection = await showFormatSheet(context, result.mediaInfo!);
+        final selection = await showFormatSheet(context, result.mediaInfo!,
+            settings: widget.settings);
         if (selection == null || !mounted) return;
         _urlController.clear();
         final error = await _dm.download(url,

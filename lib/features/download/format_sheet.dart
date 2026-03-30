@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:media_dl/core/models.dart';
+import 'package:media_dl/core/settings_notifier.dart';
 
 /// Result from the format selection sheet.
 class FormatSelection {
@@ -12,19 +13,21 @@ class FormatSelection {
 /// Returns a [FormatSelection] if user confirms, or null if dismissed.
 Future<FormatSelection?> showFormatSheet(
   BuildContext context,
-  MediaInfo info,
-) {
+  MediaInfo info, {
+  required SettingsNotifier settings,
+}) {
   return showModalBottomSheet<FormatSelection>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (context) => _FormatSheet(info: info),
+    builder: (context) => _FormatSheet(info: info, settings: settings),
   );
 }
 
 class _FormatSheet extends StatefulWidget {
-  const _FormatSheet({required this.info});
+  const _FormatSheet({required this.info, required this.settings});
   final MediaInfo info;
+  final SettingsNotifier settings;
 
   @override
   State<_FormatSheet> createState() => _FormatSheetState();
@@ -34,6 +37,9 @@ class _FormatSheetState extends State<_FormatSheet> {
   String? _selectedFormatId;
 
   MediaInfo get info => widget.info;
+  SettingsNotifier get settings => widget.settings;
+
+  bool get _audioOnly => settings.extractAudio;
 
   List<MediaFormat> get _videoAudioFormats =>
       info.formats.where((f) => f.isVideoAndAudio).toList();
@@ -129,6 +135,10 @@ class _FormatSheetState extends State<_FormatSheet> {
             ),
 
             const SizedBox(height: 12),
+
+            // Settings summary
+            _buildSettingsSummary(theme),
+
             const Divider(height: 1),
 
             // Format list
@@ -137,28 +147,45 @@ class _FormatSheetState extends State<_FormatSheet> {
                 controller: scrollController,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
-                  // Best quality option (default)
-                  _buildFormatTile(
-                    theme,
-                    title: 'Best quality',
-                    subtitle: 'Auto-select best video + audio',
-                    formatId: null,
-                    icon: Icons.auto_awesome,
-                  ),
-                  if (_videoAudioFormats.isNotEmpty) ...[
-                    _buildSectionHeader(theme, 'Video + Audio'),
-                    ..._videoAudioFormats.map(
-                        (f) => _buildFormatTileFromFormat(theme, f)),
-                  ],
-                  if (_audioOnlyFormats.isNotEmpty) ...[
-                    _buildSectionHeader(theme, 'Audio Only'),
-                    ..._audioOnlyFormats.map(
-                        (f) => _buildFormatTileFromFormat(theme, f)),
-                  ],
-                  if (_videoOnlyFormats.isNotEmpty) ...[
-                    _buildSectionHeader(theme, 'Video Only (no audio)'),
-                    ..._videoOnlyFormats.map(
-                        (f) => _buildFormatTileFromFormat(theme, f)),
+                  if (_audioOnly) ...[
+                    // Audio-only mode: show best audio + audio formats only
+                    _buildFormatTile(
+                      theme,
+                      title: 'Best quality',
+                      subtitle:
+                          'Auto-select best audio, convert to ${settings.audioFormat}',
+                      formatId: null,
+                      icon: Icons.auto_awesome,
+                    ),
+                    if (_audioOnlyFormats.isNotEmpty) ...[
+                      _buildSectionHeader(theme, 'Audio Only'),
+                      ..._audioOnlyFormats.map(
+                          (f) => _buildFormatTileFromFormat(theme, f)),
+                    ],
+                  ] else ...[
+                    // Normal mode: show all formats
+                    _buildFormatTile(
+                      theme,
+                      title: 'Best quality',
+                      subtitle: 'Auto-select best video + audio',
+                      formatId: null,
+                      icon: Icons.auto_awesome,
+                    ),
+                    if (_videoAudioFormats.isNotEmpty) ...[
+                      _buildSectionHeader(theme, 'Video + Audio'),
+                      ..._videoAudioFormats.map(
+                          (f) => _buildFormatTileFromFormat(theme, f)),
+                    ],
+                    if (_audioOnlyFormats.isNotEmpty) ...[
+                      _buildSectionHeader(theme, 'Audio Only'),
+                      ..._audioOnlyFormats.map(
+                          (f) => _buildFormatTileFromFormat(theme, f)),
+                    ],
+                    if (_videoOnlyFormats.isNotEmpty) ...[
+                      _buildSectionHeader(theme, 'Video Only (no audio)'),
+                      ..._videoOnlyFormats.map(
+                          (f) => _buildFormatTileFromFormat(theme, f)),
+                    ],
                   ],
                   const SizedBox(height: 80),
                 ],
@@ -172,9 +199,10 @@ class _FormatSheetState extends State<_FormatSheet> {
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: () {
-                    final isAudio = _selectedFormatId != null &&
-                        _audioOnlyFormats
-                            .any((f) => f.formatId == _selectedFormatId);
+                    final isAudio = _audioOnly ||
+                        (_selectedFormatId != null &&
+                            _audioOnlyFormats
+                                .any((f) => f.formatId == _selectedFormatId));
                     Navigator.of(context).pop(
                       FormatSelection(
                         formatId: _selectedFormatId,
@@ -190,6 +218,88 @@ class _FormatSheetState extends State<_FormatSheet> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildSettingsSummary(ThemeData theme) {
+    final chips = <Widget>[];
+
+    if (_audioOnly) {
+      chips.add(_settingsChip(
+        theme,
+        Icons.music_note,
+        'Audio only (${settings.audioFormat})',
+        highlight: true,
+      ));
+    } else if (settings.videoFormat != null) {
+      chips.add(_settingsChip(
+        theme,
+        Icons.video_file_outlined,
+        'Remux to ${settings.videoFormat}',
+      ));
+    }
+
+    if (settings.embedThumbnail) {
+      chips.add(_settingsChip(theme, Icons.image_outlined, 'Thumbnail'));
+    }
+    if (settings.embedMetadata) {
+      chips.add(_settingsChip(theme, Icons.info_outline, 'Metadata'));
+    }
+    if (settings.embedSubs) {
+      chips.add(_settingsChip(
+          theme, Icons.subtitles_outlined, 'Subs (${settings.subLangs})'));
+    }
+    if (settings.sponsorBlock) {
+      chips.add(_settingsChip(theme, Icons.block, 'SponsorBlock'));
+    }
+
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: chips,
+      ),
+    );
+  }
+
+  Widget _settingsChip(
+    ThemeData theme,
+    IconData icon,
+    String label, {
+    bool highlight = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: highlight
+            ? theme.colorScheme.primaryContainer
+            : theme.colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: highlight
+                ? theme.colorScheme.onPrimaryContainer
+                : theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: highlight
+                  ? theme.colorScheme.onPrimaryContainer
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
