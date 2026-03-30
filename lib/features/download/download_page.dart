@@ -65,6 +65,7 @@ class _DownloadPageState extends State<DownloadPage> {
   Future<void> _fetchAndChooseFormat() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
+    FocusScope.of(context).unfocus();
 
     if (!_dm.isReady) {
       _showError('yt-dlp not found. Check Settings → Tools.');
@@ -108,6 +109,7 @@ class _DownloadPageState extends State<DownloadPage> {
   Future<void> _quickDownload() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
+    FocusScope.of(context).unfocus();
     _urlController.clear();
     final error = await _dm.download(url);
     if (error != null && mounted) _showError(error);
