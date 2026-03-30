@@ -83,8 +83,8 @@ class SettingsPage extends StatelessWidget {
                 value: settings.extractAudio,
                 onChanged: (v) => settings.setExtractAudio(v),
               ),
-              if (settings.extractAudio)
-                _AudioFormatTile(settings: settings),
+              _AudioFormatTile(settings: settings),
+              _VideoFormatTile(settings: settings),
               const Divider(),
               const _SectionHeader(title: 'Authentication'),
               _CookieTile(settings: settings),
@@ -305,6 +305,32 @@ class _AudioFormatTile extends StatelessWidget {
         items: kAudioFormats
             .map((f) => DropdownMenuItem(value: f, child: Text(f)))
             .toList(),
+      ),
+    );
+  }
+}
+
+class _VideoFormatTile extends StatelessWidget {
+  const _VideoFormatTile({required this.settings});
+
+  final SettingsNotifier settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const SizedBox(width: 24),
+      title: const Text('Video format'),
+      trailing: DropdownButton<String>(
+        value: settings.videoFormat ?? '',
+        underline: const SizedBox.shrink(),
+        onChanged: (v) {
+          settings.setVideoFormat(v == '' ? null : v);
+        },
+        items: [
+          const DropdownMenuItem(value: '', child: Text('auto')),
+          ...kVideoFormats
+              .map((f) => DropdownMenuItem(value: f, child: Text(f))),
+        ],
       ),
     );
   }

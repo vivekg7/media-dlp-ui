@@ -22,6 +22,10 @@ const kFilenamePresets = <String, String>{
 /// Audio format options for extraction.
 const kAudioFormats = ['mp3', 'opus', 'flac', 'aac', 'm4a', 'wav'];
 
+/// Video container format options for remuxing.
+const kVideoFormats = ['mp4', 'mkv', 'webm'];
+
+
 /// Subtitle language presets.
 const kSubtitleLangPresets = ['en', 'en,es', 'en,fr', 'en,de', 'en,ja', 'all'];
 
@@ -58,6 +62,7 @@ class SettingsNotifier extends ChangeNotifier {
   bool _sponsorBlock = false;
   bool _extractAudio = false;
   String _audioFormat = 'mp3';
+  String? _videoFormat;
 
   ThemeMode get themeMode => _themeMode;
   String get outputDir => _outputDir;
@@ -76,6 +81,7 @@ class SettingsNotifier extends ChangeNotifier {
   bool get sponsorBlock => _sponsorBlock;
   bool get extractAudio => _extractAudio;
   String get audioFormat => _audioFormat;
+  String? get videoFormat => _videoFormat;
 
   void setThemeMode(ThemeMode mode) {
     if (_themeMode == mode) return;
@@ -154,6 +160,13 @@ class SettingsNotifier extends ChangeNotifier {
     _save();
   }
 
+  void setVideoFormat(String? value) {
+    if (_videoFormat == value) return;
+    _videoFormat = value;
+    notifyListeners();
+    _save();
+  }
+
   void setProxyUrl(String? value) {
     final v = (value != null && value.trim().isEmpty) ? null : value;
     if (_proxyUrl == v) return;
@@ -212,6 +225,7 @@ class SettingsNotifier extends ChangeNotifier {
       _sponsorBlock = json['sponsorBlock'] as bool? ?? false;
       _extractAudio = json['extractAudio'] as bool? ?? false;
       _audioFormat = json['audioFormat'] as String? ?? 'mp3';
+      _videoFormat = json['videoFormat'] as String?;
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to load settings: $e');
@@ -236,6 +250,7 @@ class SettingsNotifier extends ChangeNotifier {
         'sponsorBlock': _sponsorBlock,
         'extractAudio': _extractAudio,
         'audioFormat': _audioFormat,
+        'videoFormat': _videoFormat,
       };
       await File(settingsPath).writeAsString(jsonEncode(json));
     } catch (e) {

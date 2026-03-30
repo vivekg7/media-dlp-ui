@@ -526,6 +526,9 @@ class DownloadManager extends ChangeNotifier {
         '-x',
         '--audio-format', settings.audioFormat,
       ],
+      if (!settings.extractAudio && settings.videoFormat != null) ...[
+        '--remux-video', settings.videoFormat!,
+      ],
       if (settings.cookieFilePath != null) ...[
         '--cookies', settings.cookieFilePath!,
       ],
