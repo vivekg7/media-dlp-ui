@@ -35,6 +35,7 @@ class DownloadTask extends DownloadEntry {
   DownloadTask({
     required this.url,
     this.formatId,
+    this.isAudioOnly = false,
     this.status = DownloadStatus.queued,
     this.progress,
     this.fileName,
@@ -46,6 +47,7 @@ class DownloadTask extends DownloadEntry {
 
   final String url;
   final String? formatId;
+  final bool isAudioOnly;
   @override
   final DateTime createdAt;
   @override

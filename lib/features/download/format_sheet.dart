@@ -3,8 +3,9 @@ import 'package:media_dl/core/models.dart';
 
 /// Result from the format selection sheet.
 class FormatSelection {
-  const FormatSelection({this.formatId});
+  const FormatSelection({this.formatId, this.isAudioOnly = false});
   final String? formatId;
+  final bool isAudioOnly;
 }
 
 /// Shows a bottom sheet with media info and format picker.
@@ -171,8 +172,14 @@ class _FormatSheetState extends State<_FormatSheet> {
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: () {
+                    final isAudio = _selectedFormatId != null &&
+                        _audioOnlyFormats
+                            .any((f) => f.formatId == _selectedFormatId);
                     Navigator.of(context).pop(
-                      FormatSelection(formatId: _selectedFormatId),
+                      FormatSelection(
+                        formatId: _selectedFormatId,
+                        isAudioOnly: isAudio,
+                      ),
                     );
                   },
                   icon: const Icon(Icons.download),

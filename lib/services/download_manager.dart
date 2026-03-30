@@ -78,12 +78,12 @@ class DownloadManager extends ChangeNotifier {
   // Single download
   // ---------------------------------------------------------------------------
 
-  Future<String?> download(String url, {String? formatId}) async {
+  Future<String?> download(String url, {String? formatId, bool isAudioOnly = false}) async {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
     if (!isReady) return 'yt-dlp not found. Check Settings → Tools.';
 
-    final task = DownloadTask(url: trimmed, formatId: formatId);
+    final task = DownloadTask(url: trimmed, formatId: formatId, isAudioOnly: isAudioOnly);
     _entries.insert(0, task);
     notifyListeners();
     _saveHistory();
@@ -272,10 +272,16 @@ class DownloadManager extends ChangeNotifier {
     try {
       final outDir = settings.outputDir;
       final template = settings.filenameTemplate;
+      // When an audio-only format is selected and thumbnail embedding is on,
+      // extract audio to a compatible container (mp3/opus/m4a etc).
+      final needsAudioExtract = task.isAudioOnly &&
+          settings.embedThumbnail &&
+          !settings.extractAudio;
       final args = [
         '--newline',
         '-o', '$outDir/$template',
         ..._settingsArgs,
+        if (needsAudioExtract) ...['-x', '--audio-format', settings.audioFormat],
         if (task.formatId != null) ...['-f', task.formatId!],
         task.url,
       ];
