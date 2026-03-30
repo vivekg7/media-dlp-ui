@@ -296,15 +296,16 @@ class _AudioFormatTile extends StatelessWidget {
     return ListTile(
       leading: const SizedBox(width: 24),
       title: const Text('Audio format'),
-      trailing: DropdownButton<String>(
-        value: settings.audioFormat,
-        underline: const SizedBox.shrink(),
-        onChanged: (v) {
-          if (v != null) settings.setAudioFormat(v);
-        },
-        items: kAudioFormats
-            .map((f) => DropdownMenuItem(value: f, child: Text(f)))
-            .toList(),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: SegmentedButton<String>(
+          segments: kAudioFormats
+              .map((f) => ButtonSegment(value: f, label: Text(f)))
+              .toList(),
+          selected: {settings.audioFormat},
+          onSelectionChanged: (v) => settings.setAudioFormat(v.first),
+          showSelectedIcon: false,
+        ),
       ),
     );
   }
@@ -320,17 +321,19 @@ class _VideoFormatTile extends StatelessWidget {
     return ListTile(
       leading: const SizedBox(width: 24),
       title: const Text('Video format'),
-      trailing: DropdownButton<String>(
-        value: settings.videoFormat ?? '',
-        underline: const SizedBox.shrink(),
-        onChanged: (v) {
-          settings.setVideoFormat(v == '' ? null : v);
-        },
-        items: [
-          const DropdownMenuItem(value: '', child: Text('auto')),
-          ...kVideoFormats
-              .map((f) => DropdownMenuItem(value: f, child: Text(f))),
-        ],
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: SegmentedButton<String>(
+          segments: [
+            const ButtonSegment(value: '', label: Text('auto')),
+            ...kVideoFormats
+                .map((f) => ButtonSegment(value: f, label: Text(f))),
+          ],
+          selected: {settings.videoFormat ?? ''},
+          onSelectionChanged: (v) =>
+              settings.setVideoFormat(v.first.isEmpty ? null : v.first),
+          showSelectedIcon: false,
+        ),
       ),
     );
   }

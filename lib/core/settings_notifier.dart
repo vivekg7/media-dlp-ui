@@ -20,7 +20,7 @@ const kFilenamePresets = <String, String>{
 };
 
 /// Audio format options for extraction.
-const kAudioFormats = ['mp3', 'opus', 'flac', 'aac', 'm4a', 'wav'];
+const kAudioFormats = ['mp3', 'opus', 'aac', 'm4a'];
 
 /// Video container format options for remuxing.
 const kVideoFormats = ['mp4', 'mkv', 'webm'];
