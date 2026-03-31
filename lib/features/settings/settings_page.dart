@@ -120,6 +120,7 @@ class SettingsPage extends StatelessWidget {
                 binaryManager: binaryManager,
                 updateChecker: updateChecker,
               ),
+              _ToolInfoTile(binaryManager: binaryManager),
               const Divider(),
               const _SectionHeader(title: 'About'),
               const ListTile(
@@ -893,6 +894,53 @@ class _BinaryTileState extends State<_BinaryTile> {
         'Already on the latest version',
         style: TextStyle(color: Colors.grey, fontSize: 13),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Additional tool info (ffmpeg, library version)
+// ---------------------------------------------------------------------------
+
+class _ToolInfoTile extends StatelessWidget {
+  const _ToolInfoTile({required this.binaryManager});
+
+  final BinaryManager binaryManager;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ffmpeg = binaryManager.ffmpeg;
+    final libVersion = binaryManager.libraryVersion;
+
+    return Column(
+      children: [
+        ListTile(
+          leading: Icon(
+            ffmpeg.isAvailable
+                ? Icons.check_circle_outline
+                : Icons.error_outline,
+            color: ffmpeg.isAvailable
+                ? theme.colorScheme.primary
+                : theme.colorScheme.error,
+          ),
+          title: const Text('ffmpeg'),
+          subtitle: Text(
+            ffmpeg.isAvailable
+                ? 'v${ffmpeg.version}${ffmpeg.path != 'android-embedded' && ffmpeg.path != null ? '  •  ${ffmpeg.path}' : ''}'
+                : ffmpeg.error ?? 'Not found',
+          ),
+        ),
+        if (libVersion != null)
+          ListTile(
+            leading: Icon(
+              Icons.check_circle_outline,
+              color: theme.colorScheme.primary,
+            ),
+            title: const Text('youtubedl-android'),
+            subtitle: Text('v$libVersion'),
+          ),
+      ],
     );
   }
 }

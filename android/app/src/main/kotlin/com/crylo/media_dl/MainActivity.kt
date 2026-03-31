@@ -54,6 +54,8 @@ class MainActivity : FlutterActivity() {
                     }
                     "version" -> handleVersion(result)
                     "updateYtDlp" -> handleUpdate(result)
+                    "ffmpegVersion" -> handleFfmpegVersion(result)
+                    "libraryVersion" -> result.success("0.18.1")
                     else -> result.notImplemented()
                 }
             }
@@ -185,6 +187,17 @@ class MainActivity : FlutterActivity() {
                 withContext(Dispatchers.Main) {
                     result.error("VERSION_FAILED", e.message, null)
                 }
+            }
+        }
+    }
+
+    private fun handleFfmpegVersion(result: MethodChannel.Result) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val version = FFmpeg.getInstance().version(applicationContext)
+                withContext(Dispatchers.Main) { result.success(version) }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { result.success(null) }
             }
         }
     }

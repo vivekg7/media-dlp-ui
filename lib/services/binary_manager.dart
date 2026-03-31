@@ -32,21 +32,31 @@ class BinaryManager extends ChangeNotifier {
   BinaryInfo _ytDlp = const BinaryInfo(name: 'yt-dlp');
   BinaryInfo get ytDlp => _ytDlp;
 
+  BinaryInfo _ffmpeg = const BinaryInfo(name: 'ffmpeg');
+  BinaryInfo get ffmpeg => _ffmpeg;
+
+  /// youtubedl-android library version (Android only).
+  String? _libraryVersion;
+  String? get libraryVersion => _libraryVersion;
+
   bool _checking = false;
   bool get checking => _checking;
 
   bool _updating = false;
   bool get updating => _updating;
 
-  /// Detect yt-dlp binary and fetch its version.
+  /// Detect yt-dlp and ffmpeg binaries and fetch their versions.
   Future<void> detect() async {
     _checking = true;
     notifyListeners();
 
     if (Platform.isAndroid) {
       _ytDlp = await _detectAndroidBinary();
+      _ffmpeg = await _detectAndroidFfmpeg();
+      _libraryVersion = await _getAndroidLibraryVersion();
     } else {
       _ytDlp = await _detectBinary('yt-dlp');
+      _ffmpeg = await _detectFfmpeg();
     }
 
     _checking = false;
@@ -143,6 +153,56 @@ class BinaryManager extends ChangeNotifier {
       );
     } catch (e) {
       return BinaryInfo(name: name, path: path, error: 'Error running $name: $e');
+    }
+  }
+
+  /// Detect ffmpeg on desktop by running `ffmpeg -version`.
+  Future<BinaryInfo> _detectFfmpeg() async {
+    final name = 'ffmpeg';
+    final path = await resolver.resolve(name);
+    if (path == null) {
+      return BinaryInfo(name: name, error: 'ffmpeg not found');
+    }
+
+    try {
+      final result = await Process.run(path, ['-version']);
+      if (result.exitCode == 0) {
+        // First line: "ffmpeg version 7.0.1 Copyright ..."
+        final firstLine = (result.stdout as String).split('\n').first.trim();
+        final match = RegExp(r'ffmpeg version (\S+)').firstMatch(firstLine);
+        final version = match?.group(1) ?? firstLine;
+        return BinaryInfo(name: name, path: path, version: version);
+      }
+      return BinaryInfo(name: name, path: path, error: 'Exit code ${result.exitCode}');
+    } catch (e) {
+      return BinaryInfo(name: name, path: path, error: 'Error: $e');
+    }
+  }
+
+  /// Get ffmpeg version on Android via the library.
+  Future<BinaryInfo> _detectAndroidFfmpeg() async {
+    try {
+      final result = await _ytdlpChannel.invokeMethod<String>('ffmpegVersion');
+      return BinaryInfo(
+        name: 'ffmpeg',
+        path: 'android-embedded',
+        version: result ?? 'bundled',
+      );
+    } catch (_) {
+      return const BinaryInfo(
+        name: 'ffmpeg',
+        path: 'android-embedded',
+        version: 'bundled',
+      );
+    }
+  }
+
+  /// Get the youtubedl-android library version on Android.
+  Future<String?> _getAndroidLibraryVersion() async {
+    try {
+      return await _ytdlpChannel.invokeMethod<String>('libraryVersion');
+    } catch (_) {
+      return null;
     }
   }
 }
