@@ -192,14 +192,8 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handleFfmpegVersion(result: MethodChannel.Result) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                val version = FFmpeg.getInstance().version(applicationContext)
-                withContext(Dispatchers.Main) { result.success(version) }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) { result.success(null) }
-            }
-        }
+        // FFmpeg library doesn't expose a version API; just report as bundled.
+        result.success(null)
     }
 
     private fun handleUpdate(result: MethodChannel.Result) {
