@@ -612,6 +612,7 @@ class DownloadManager extends ChangeNotifier {
       if (settings.embedSubs) ...[
         '--embed-subs',
         '--sub-langs', settings.subLangs,
+        '--postprocessor-args', 'ffmpeg:-disposition:s:0 default',
       ],
       if (settings.sponsorBlock) '--sponsorblock-remove',
       if (settings.extractAudio) ...[
