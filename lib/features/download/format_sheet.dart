@@ -154,31 +154,28 @@ class _FormatSheetState extends State<_FormatSheet> {
 
             const Divider(height: 1),
 
-            // Subtitle toggle
-            if (!_audioOnly)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: SwitchListTile(
-                  dense: true,
-                  secondary: const Icon(Icons.subtitles_outlined, size: 20),
-                  title: Text('Subtitles',
-                      style: theme.textTheme.bodyMedium),
-                  subtitle: _embedSubs
-                      ? Text(settings.subLangs,
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: theme.colorScheme.outline))
-                      : null,
-                  value: _embedSubs,
-                  onChanged: (v) => setState(() => _embedSubs = v),
-                ),
-              ),
-
             // Format list
             Expanded(
               child: ListView(
                 controller: scrollController,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
+                  // Subtitle toggle
+                  if (!_audioOnly)
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.subtitles_outlined, size: 20),
+                      title: Text('Subtitles',
+                          style: theme.textTheme.bodyMedium),
+                      subtitle: _embedSubs
+                          ? Text(settings.subLangs,
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: theme.colorScheme.outline))
+                          : null,
+                      value: _embedSubs,
+                      onChanged: (v) => setState(() => _embedSubs = v),
+                    ),
                   if (_audioOnly) ...[
                     // Audio-only mode: show best audio + audio formats only
                     _buildFormatTile(
