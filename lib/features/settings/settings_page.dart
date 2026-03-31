@@ -86,6 +86,14 @@ class SettingsPage extends StatelessWidget {
               _AudioFormatTile(settings: settings),
               _VideoFormatTile(settings: settings),
               const Divider(),
+              const _SectionHeader(title: 'gallery-dl'),
+              _FilenameTile(
+                label: 'Filename template',
+                value: settings.galleryDlTemplate,
+                presets: kGalleryDlPresets,
+                onChanged: settings.setGalleryDlTemplate,
+              ),
+              const Divider(),
               const _SectionHeader(title: 'Authentication'),
               _CookieTile(settings: settings),
               const Divider(),
@@ -120,6 +128,7 @@ class SettingsPage extends StatelessWidget {
                 binaryManager: binaryManager,
                 updateChecker: updateChecker,
               ),
+              _GalleryDlTile(binaryManager: binaryManager),
               _ToolInfoTile(binaryManager: binaryManager),
               const Divider(),
               const _SectionHeader(title: 'About'),
@@ -893,6 +902,39 @@ class _BinaryTileState extends State<_BinaryTile> {
       child: Text(
         'Already on the latest version',
         style: TextStyle(color: Colors.grey, fontSize: 13),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// gallery-dl binary
+// ---------------------------------------------------------------------------
+
+class _GalleryDlTile extends StatelessWidget {
+  const _GalleryDlTile({required this.binaryManager});
+
+  final BinaryManager binaryManager;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final info = binaryManager.galleryDl;
+
+    return ListTile(
+      leading: Icon(
+        info.isAvailable
+            ? Icons.check_circle_outline
+            : Icons.error_outline,
+        color: info.isAvailable
+            ? theme.colorScheme.primary
+            : theme.colorScheme.error,
+      ),
+      title: const Text('gallery-dl'),
+      subtitle: Text(
+        info.isAvailable
+            ? 'v${info.version}  •  ${info.path}'
+            : info.error ?? 'Not found',
       ),
     );
   }

@@ -38,6 +38,7 @@ class DownloadPage extends StatefulWidget {
 class _DownloadPageState extends State<DownloadPage> {
   final _urlController = TextEditingController();
   bool _fetching = false;
+  DownloadBackend _selectedBackend = DownloadBackend.ytDlp;
 
   DownloadManager get _dm => widget.downloadManager;
 
@@ -62,6 +63,23 @@ class _DownloadPageState extends State<DownloadPage> {
   void _handleSharedUrl(String url) {
     _urlController.text = url.trim();
     _fetchAndChooseFormat();
+  }
+
+  void _handleDownload() {
+    if (_selectedBackend == DownloadBackend.galleryDl) {
+      _startGalleryDlDownload();
+    } else {
+      _fetchAndChooseFormat();
+    }
+  }
+
+  Future<void> _startGalleryDlDownload() async {
+    final url = _urlController.text.trim();
+    if (url.isEmpty) return;
+    FocusScope.of(context).unfocus();
+    _urlController.clear();
+    final error = await _dm.downloadWithGalleryDl(url);
+    if (error != null && mounted) _showError(error);
   }
 
   /// Fetch info, auto-detect playlist vs single, show appropriate sheet.
@@ -212,7 +230,7 @@ class _DownloadPageState extends State<DownloadPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(
               children: [
                 Expanded(
@@ -223,12 +241,12 @@ class _DownloadPageState extends State<DownloadPage> {
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.link),
                     ),
-                    onSubmitted: (_) => _fetchAndChooseFormat(),
+                    onSubmitted: (_) => _handleDownload(),
                   ),
                 ),
                 const SizedBox(width: 12),
                 FilledButton.icon(
-                  onPressed: _fetching ? null : _fetchAndChooseFormat,
+                  onPressed: _fetching ? null : _handleDownload,
                   icon: _fetching
                       ? const SizedBox(
                           width: 18,
@@ -238,11 +256,38 @@ class _DownloadPageState extends State<DownloadPage> {
                       : const Icon(Icons.download),
                   label: const Text('Download'),
                 ),
-                const SizedBox(width: 4),
-                IconButton(
-                  onPressed: _fetching ? null : _quickDownload,
-                  icon: const Icon(Icons.bolt),
-                  tooltip: 'Quick download (best quality)',
+                if (_selectedBackend == DownloadBackend.ytDlp) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: _fetching ? null : _quickDownload,
+                    icon: const Icon(Icons.bolt),
+                    tooltip: 'Quick download (best quality)',
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                SegmentedButton<DownloadBackend>(
+                  segments: const [
+                    ButtonSegment(
+                      value: DownloadBackend.ytDlp,
+                      label: Text('yt-dlp'),
+                      icon: Icon(Icons.video_library_outlined, size: 18),
+                    ),
+                    ButtonSegment(
+                      value: DownloadBackend.galleryDl,
+                      label: Text('gallery-dl'),
+                      icon: Icon(Icons.photo_library_outlined, size: 18),
+                    ),
+                  ],
+                  selected: {_selectedBackend},
+                  onSelectionChanged: (v) =>
+                      setState(() => _selectedBackend = v.first),
+                  showSelectedIcon: false,
                 ),
               ],
             ),
@@ -380,11 +425,24 @@ class _DownloadCard extends StatelessWidget {
                 _statusIcon(task.status, colorScheme),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    task.fileName ?? task.url,
-                    style: theme.textTheme.bodyLarge,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        task.fileName ?? task.url,
+                        style: theme.textTheme.bodyLarge,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (task.backend == DownloadBackend.galleryDl)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text('gallery-dl',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: colorScheme.outline,
+                              )),
+                        ),
+                    ],
                   ),
                 ),
                 _actionButtons(task.status),
@@ -394,9 +452,11 @@ class _DownloadCard extends StatelessWidget {
                 task.status == DownloadStatus.paused) ...[
               const SizedBox(height: 12),
               LinearProgressIndicator(
-                value: task.progress != null
-                    ? task.progress!.percent / 100.0
-                    : null,
+                value: task.backend == DownloadBackend.galleryDl
+                    ? null
+                    : task.progress != null
+                        ? task.progress!.percent / 100.0
+                        : null,
                 borderRadius: BorderRadius.circular(4),
               ),
               const SizedBox(height: 8),

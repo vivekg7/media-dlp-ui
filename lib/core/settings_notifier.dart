@@ -25,6 +25,17 @@ const kAudioFormats = ['mp3', 'opus', 'aac', 'm4a'];
 /// Video container format options for remuxing.
 const kVideoFormats = ['mp4', 'mkv', 'webm'];
 
+/// Default gallery-dl filename template.
+const kDefaultGalleryDlTemplate = '{category}/{filename}.{extension}';
+
+/// gallery-dl filename template presets.
+const kGalleryDlPresets = <String, String>{
+  'Category / Filename': '{category}/{filename}.{extension}',
+  'Category / Subcategory / Filename':
+      '{category}/{subcategory}/{filename}.{extension}',
+  'Category / Num - Filename':
+      '{category}/{num:>03}_{filename}.{extension}',
+};
 
 /// Subtitle language presets.
 const kSubtitleLangPresets = ['en', 'en,es', 'en,fr', 'en,de', 'en,ja', 'all'];
@@ -64,6 +75,9 @@ class SettingsNotifier extends ChangeNotifier {
   String _audioFormat = 'mp3';
   String? _videoFormat;
 
+  // gallery-dl
+  String _galleryDlTemplate = kDefaultGalleryDlTemplate;
+
   ThemeMode get themeMode => _themeMode;
   String get outputDir => _outputDir;
   String get filenameTemplate => _filenameTemplate;
@@ -82,6 +96,7 @@ class SettingsNotifier extends ChangeNotifier {
   bool get extractAudio => _extractAudio;
   String get audioFormat => _audioFormat;
   String? get videoFormat => _videoFormat;
+  String get galleryDlTemplate => _galleryDlTemplate;
 
   void setThemeMode(ThemeMode mode) {
     if (_themeMode == mode) return;
@@ -167,6 +182,13 @@ class SettingsNotifier extends ChangeNotifier {
     _save();
   }
 
+  void setGalleryDlTemplate(String value) {
+    if (_galleryDlTemplate == value) return;
+    _galleryDlTemplate = value;
+    notifyListeners();
+    _save();
+  }
+
   void setProxyUrl(String? value) {
     final v = (value != null && value.trim().isEmpty) ? null : value;
     if (_proxyUrl == v) return;
@@ -226,6 +248,7 @@ class SettingsNotifier extends ChangeNotifier {
       _extractAudio = json['extractAudio'] as bool? ?? false;
       _audioFormat = json['audioFormat'] as String? ?? 'mp3';
       _videoFormat = json['videoFormat'] as String?;
+      _galleryDlTemplate = json['galleryDlTemplate'] as String? ?? kDefaultGalleryDlTemplate;
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to load settings: $e');
@@ -251,6 +274,7 @@ class SettingsNotifier extends ChangeNotifier {
         'extractAudio': _extractAudio,
         'audioFormat': _audioFormat,
         'videoFormat': _videoFormat,
+        'galleryDlTemplate': _galleryDlTemplate,
       };
       await File(settingsPath).writeAsString(jsonEncode(json));
     } catch (e) {

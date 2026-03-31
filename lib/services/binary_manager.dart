@@ -32,6 +32,9 @@ class BinaryManager extends ChangeNotifier {
   BinaryInfo _ytDlp = const BinaryInfo(name: 'yt-dlp');
   BinaryInfo get ytDlp => _ytDlp;
 
+  BinaryInfo _galleryDl = const BinaryInfo(name: 'gallery-dl');
+  BinaryInfo get galleryDl => _galleryDl;
+
   BinaryInfo _ffmpeg = const BinaryInfo(name: 'ffmpeg');
   BinaryInfo get ffmpeg => _ffmpeg;
 
@@ -54,8 +57,14 @@ class BinaryManager extends ChangeNotifier {
       _ytDlp = await _detectAndroidBinary();
       _ffmpeg = await _detectAndroidFfmpeg();
       _libraryVersion = await _getAndroidLibraryVersion();
+      // gallery-dl not yet available on Android
+      _galleryDl = const BinaryInfo(
+        name: 'gallery-dl',
+        error: 'Not available on Android yet',
+      );
     } else {
       _ytDlp = await _detectBinary('yt-dlp');
+      _galleryDl = await _detectBinary('gallery-dl');
       _ffmpeg = await _detectFfmpeg();
     }
 

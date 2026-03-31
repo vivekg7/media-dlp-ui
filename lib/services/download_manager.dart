@@ -8,6 +8,7 @@ import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/services/binary_manager.dart';
 import 'package:media_dl/services/notification_service.dart';
 import 'package:media_dl/services/process_runner.dart';
+import 'package:media_dl/services/gallerydl_output_parser.dart';
 import 'package:media_dl/services/ytdlp_output_parser.dart';
 
 /// Manages downloads with queuing, concurrency control, and persistence.
@@ -29,7 +30,8 @@ class DownloadManager extends ChangeNotifier {
   final int maxConcurrent;
   final ProcessRunner _processRunner;
   final NotificationService _notifications;
-  final YtDlpOutputParser _parser = YtDlpOutputParser();
+  final YtDlpOutputParser _ytDlpParser = YtDlpOutputParser();
+  final GalleryDlOutputParser _galleryDlParser = GalleryDlOutputParser();
 
   final List<DownloadEntry> _entries = [];
   List<DownloadEntry> get entries => List.unmodifiable(_entries);
@@ -39,6 +41,7 @@ class DownloadManager extends ChangeNotifier {
       _entries.where((e) => e.status == DownloadStatus.downloading).length;
 
   bool get isReady => binaryManager.ytDlp.isAvailable;
+  bool get isGalleryDlReady => binaryManager.galleryDl.isAvailable;
 
   // ---------------------------------------------------------------------------
   // History persistence
@@ -97,6 +100,25 @@ class DownloadManager extends ChangeNotifier {
       uploader: mediaInfo?.uploader,
       duration: mediaInfo?.duration,
       embedSubsOverride: embedSubs,
+    );
+    _entries.insert(0, task);
+    notifyListeners();
+    _saveHistory();
+    _processQueue();
+    return null;
+  }
+
+  /// Start a gallery-dl download.
+  Future<String?> downloadWithGalleryDl(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+    if (!isGalleryDlReady) {
+      return 'gallery-dl not found. Check Settings → Tools.';
+    }
+
+    final task = DownloadTask(
+      url: trimmed,
+      backend: DownloadBackend.galleryDl,
     );
     _entries.insert(0, task);
     notifyListeners();
@@ -315,9 +337,6 @@ class DownloadManager extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   void _processQueue() {
-    final binaryPath = binaryManager.ytDlp.path;
-    if (binaryPath == null) return;
-
     while (_activeCount < maxConcurrent) {
       final next = _entries.cast<DownloadEntry?>().firstWhere(
             (e) => e!.status == DownloadStatus.queued,
@@ -326,10 +345,18 @@ class DownloadManager extends ChangeNotifier {
       if (next == null) break;
 
       switch (next) {
+        case DownloadTask task when task.backend == DownloadBackend.galleryDl:
+          final path = binaryManager.galleryDl.path;
+          if (path == null) break;
+          _runGalleryDlDownload(task, path);
         case DownloadTask task:
-          _runSingleDownload(task, binaryPath);
+          final path = binaryManager.ytDlp.path;
+          if (path == null) break;
+          _runSingleDownload(task, path);
         case PlaylistDownloadTask playlist:
-          _runPlaylistDownload(playlist, binaryPath);
+          final path = binaryManager.ytDlp.path;
+          if (path == null) break;
+          _runPlaylistDownload(playlist, path);
       }
     }
   }
@@ -404,7 +431,7 @@ class DownloadManager extends ChangeNotifier {
   }
 
   void _handleSingleLine(DownloadTask task, String line) {
-    final parsed = _parser.parseLine(line);
+    final parsed = _ytDlpParser.parseLine(line);
     switch (parsed.type) {
       case ParsedLineType.progress:
         task.progress = parsed.progress;
@@ -442,6 +469,110 @@ class DownloadManager extends ChangeNotifier {
       default:
         break;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // gallery-dl download execution
+  // ---------------------------------------------------------------------------
+
+  Future<void> _runGalleryDlDownload(
+      DownloadTask task, String binaryPath) async {
+    task.status = DownloadStatus.downloading;
+    notifyListeners();
+
+    await _ensureOutputDir();
+
+    try {
+      final outDir = settings.outputDir;
+      final template = settings.galleryDlTemplate;
+      final args = [
+        '--verbose',
+        '-d', outDir,
+        '--filename', template,
+        ..._galleryDlArgs(),
+        task.url,
+      ];
+      final process = await _processRunner.start(binaryPath, args);
+      _activeProcesses[task] = process;
+
+      int fileCount = 0;
+      final stdoutSub = process.stdout.listen((line) {
+        final parsed = _galleryDlParser.parseLine(line);
+        switch (parsed.type) {
+          case ParsedLineType.destination:
+            fileCount++;
+            if (parsed.destinationPath != null) {
+              task.tempPaths.add(parsed.destinationPath!);
+              task.outputPath = parsed.destinationPath;
+              task.fileName = '$fileCount files downloaded';
+            }
+            notifyListeners();
+          case ParsedLineType.alreadyDownloaded:
+            fileCount++;
+            if (parsed.destinationPath != null) {
+              task.outputPath ??= parsed.destinationPath;
+              task.fileName = '$fileCount files (some skipped)';
+            }
+            notifyListeners();
+          case ParsedLineType.error:
+            task.error = parsed.message;
+          default:
+            break;
+        }
+      });
+      final stderrSub = process.stderr.listen((line) {
+        final parsed = _galleryDlParser.parseLine(line);
+        if (parsed.type == ParsedLineType.error) {
+          task.error = parsed.message;
+        }
+      });
+
+      final exitCode = await process.exitCode;
+      await stdoutSub.cancel();
+      await stderrSub.cancel();
+      _activeProcesses.remove(task);
+
+      if (task.status == DownloadStatus.cancelled ||
+          task.status == DownloadStatus.paused) {
+        return;
+      }
+
+      if (exitCode == 0) {
+        task.status = DownloadStatus.completed;
+        if (fileCount > 0) {
+          task.fileName = '$fileCount file${fileCount == 1 ? '' : 's'} downloaded';
+        }
+        task.progress = const DownloadProgress(percent: 100.0);
+        _notifications.downloadComplete(task.fileName ?? task.url);
+      } else {
+        task.status = DownloadStatus.failed;
+        task.error ??= 'gallery-dl exited with code $exitCode';
+        _notifications.downloadFailed(task.fileName ?? task.url, task.error);
+      }
+    } catch (e) {
+      task.status = DownloadStatus.failed;
+      task.error = e.toString();
+      _notifications.downloadFailed(task.fileName ?? task.url, task.error);
+    }
+
+    notifyListeners();
+    _saveHistory();
+    _processQueue();
+  }
+
+  /// Returns common args for gallery-dl from shared settings.
+  List<String> _galleryDlArgs() {
+    return [
+      if (settings.cookieFilePath != null) ...[
+        '--cookies', settings.cookieFilePath!,
+      ],
+      if (settings.proxyUrl != null) ...[
+        '--proxy', settings.proxyUrl!,
+      ],
+      if (settings.rateLimit != null) ...[
+        '--limit-rate', settings.rateLimit!,
+      ],
+    ];
   }
 
   // ---------------------------------------------------------------------------
@@ -538,7 +669,7 @@ class DownloadManager extends ChangeNotifier {
   }
 
   void _handlePlaylistLine(PlaylistDownloadTask playlist, String line) {
-    final parsed = _parser.parseLine(line);
+    final parsed = _ytDlpParser.parseLine(line);
     final currentItem = playlist.currentItemIndex < playlist.items.length
         ? playlist.items[playlist.currentItemIndex]
         : null;

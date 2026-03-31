@@ -1,3 +1,6 @@
+/// Which download backend to use.
+enum DownloadBackend { ytDlp, galleryDl }
+
 /// Status of a download task.
 enum DownloadStatus {
   queued,
@@ -34,6 +37,7 @@ sealed class DownloadEntry {
 class DownloadTask extends DownloadEntry {
   DownloadTask({
     required this.url,
+    this.backend = DownloadBackend.ytDlp,
     this.formatId,
     this.isAudioOnly = false,
     this.mediaTitle,
@@ -50,6 +54,7 @@ class DownloadTask extends DownloadEntry {
   }) : createdAt = createdAt ?? DateTime.now();
 
   final String url;
+  final DownloadBackend backend;
   final String? formatId;
   final bool isAudioOnly;
 
@@ -84,6 +89,7 @@ class DownloadTask extends DownloadEntry {
   Map<String, dynamic> toJson() => {
         'type': 'single',
         'url': url,
+        'backend': backend.name,
         'formatId': formatId,
         'mediaTitle': mediaTitle,
         'uploader': uploader,
@@ -98,6 +104,8 @@ class DownloadTask extends DownloadEntry {
 
   factory DownloadTask.fromJson(Map<String, dynamic> json) => DownloadTask(
         url: json['url'] as String,
+        backend: DownloadBackend.values.byName(
+            json['backend'] as String? ?? 'ytDlp'),
         formatId: json['formatId'] as String?,
         mediaTitle: json['mediaTitle'] as String?,
         uploader: json['uploader'] as String?,
