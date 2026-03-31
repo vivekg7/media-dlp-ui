@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_dl/core/models.dart';
 import 'package:media_dl/core/settings_notifier.dart';
 import 'package:media_dl/features/download/format_sheet.dart';
@@ -99,7 +100,8 @@ class _DownloadPageState extends State<DownloadPage> {
         _urlController.clear();
         final error = await _dm.download(url,
             formatId: selection.formatId,
-            isAudioOnly: selection.isAudioOnly);
+            isAudioOnly: selection.isAudioOnly,
+            mediaInfo: result.mediaInfo);
         if (error != null && mounted) _showError(error);
       }
     } catch (e) {
@@ -364,7 +366,10 @@ class _DownloadCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _showDetails(context),
+        child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,6 +428,16 @@ class _DownloadCard extends StatelessWidget {
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  void _showDetails(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => _DownloadDetailSheet(task: task),
     );
   }
 
@@ -795,4 +810,189 @@ Widget _progressText(ThemeData theme, DownloadProgress? progress) {
   if (progress.speed != null) parts.add(progress.speed!);
   if (progress.eta != null) parts.add('ETA ${progress.eta}');
   return Text(parts.join('  ·  '), style: theme.textTheme.bodySmall);
+}
+
+// ---------------------------------------------------------------------------
+// Download detail sheet
+// ---------------------------------------------------------------------------
+
+class _DownloadDetailSheet extends StatelessWidget {
+  const _DownloadDetailSheet({required this.task});
+
+  final DownloadTask task;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.5,
+      minChildSize: 0.3,
+      maxChildSize: 0.85,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            // Drag handle
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 8),
+              child: Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+
+            // Title
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  _statusIcon(task.status, colorScheme),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      task.fileName ?? task.url,
+                      style: theme.textTheme.titleSmall,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+
+            // Details
+            Expanded(
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (task.mediaTitle != null)
+                    _detailRow(context, 'Title', task.mediaTitle!),
+                  if (task.uploader != null)
+                    _detailRow(context, 'Uploader', task.uploader!),
+                  _detailRow(context, 'Source', _extractDomain(task.url)),
+                  _detailRow(context, 'URL', task.url, copyable: true),
+                  _detailRow(context, 'Status', _statusLabel(task.status)),
+                  _detailRow(context, 'Date', _formatDate(task.createdAt)),
+                  if (task.duration != null)
+                    _detailRow(context, 'Duration',
+                        _formatDuration(task.duration!)),
+                  if (task.fileSize != null)
+                    _detailRow(context, 'File size', task.fileSize!),
+                  if (task.outputPath != null)
+                    _detailRow(context, 'Type',
+                        task.isAudioOnly ? 'Audio' : _extensionLabel(task.outputPath!)),
+                  if (task.formatId != null)
+                    _detailRow(context, 'Format ID', task.formatId!),
+                  if (task.outputPath != null)
+                    _detailRow(context, 'Path', task.outputPath!,
+                        copyable: true),
+                  if (task.error != null)
+                    _detailRow(context, 'Error', task.error!),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _detailRow(
+    BuildContext context,
+    String label,
+    String value, {
+    bool copyable = false,
+  }) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.outline,
+              )),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Expanded(
+                child: SelectableText(
+                  value,
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+              if (copyable)
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 16),
+                  tooltip: 'Copy',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: value));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('$label copied'),
+                        duration: const Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _statusLabel(DownloadStatus status) {
+    return switch (status) {
+      DownloadStatus.queued => 'Queued',
+      DownloadStatus.downloading => 'Downloading',
+      DownloadStatus.paused => 'Paused',
+      DownloadStatus.completed => 'Completed',
+      DownloadStatus.failed => 'Failed',
+      DownloadStatus.cancelled => 'Cancelled',
+    };
+  }
+
+  String _formatDate(DateTime date) {
+    final d = date.toLocal();
+    return '${d.year}-${_pad(d.month)}-${_pad(d.day)} '
+        '${_pad(d.hour)}:${_pad(d.minute)}';
+  }
+
+  String _formatDuration(double seconds) {
+    final total = seconds.toInt();
+    final h = total ~/ 3600;
+    final m = (total % 3600) ~/ 60;
+    final s = total % 60;
+    if (h > 0) return '$h:${_pad(m)}:${_pad(s)}';
+    return '$m:${_pad(s)}';
+  }
+
+  String _extractDomain(String url) {
+    try {
+      return Uri.parse(url).host;
+    } catch (_) {
+      return url;
+    }
+  }
+
+  String _extensionLabel(String path) {
+    final dot = path.lastIndexOf('.');
+    if (dot < 0) return 'Unknown';
+    return path.substring(dot + 1).toUpperCase();
+  }
+
+  String _pad(int n) => n.toString().padLeft(2, '0');
 }

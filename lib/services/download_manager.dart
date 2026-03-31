@@ -78,12 +78,24 @@ class DownloadManager extends ChangeNotifier {
   // Single download
   // ---------------------------------------------------------------------------
 
-  Future<String?> download(String url, {String? formatId, bool isAudioOnly = false}) async {
+  Future<String?> download(
+    String url, {
+    String? formatId,
+    bool isAudioOnly = false,
+    MediaInfo? mediaInfo,
+  }) async {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
     if (!isReady) return 'yt-dlp not found. Check Settings → Tools.';
 
-    final task = DownloadTask(url: trimmed, formatId: formatId, isAudioOnly: isAudioOnly);
+    final task = DownloadTask(
+      url: trimmed,
+      formatId: formatId,
+      isAudioOnly: isAudioOnly,
+      mediaTitle: mediaInfo?.title,
+      uploader: mediaInfo?.uploader,
+      duration: mediaInfo?.duration,
+    );
     _entries.insert(0, task);
     notifyListeners();
     _saveHistory();

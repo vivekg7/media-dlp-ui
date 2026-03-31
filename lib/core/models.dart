@@ -36,6 +36,9 @@ class DownloadTask extends DownloadEntry {
     required this.url,
     this.formatId,
     this.isAudioOnly = false,
+    this.mediaTitle,
+    this.uploader,
+    this.duration,
     this.status = DownloadStatus.queued,
     this.progress,
     this.fileName,
@@ -48,6 +51,11 @@ class DownloadTask extends DownloadEntry {
   final String url;
   final String? formatId;
   final bool isAudioOnly;
+
+  /// Metadata from media info (available when fetched via format sheet).
+  final String? mediaTitle;
+  final String? uploader;
+  final double? duration;
   @override
   final DateTime createdAt;
   @override
@@ -73,6 +81,9 @@ class DownloadTask extends DownloadEntry {
         'type': 'single',
         'url': url,
         'formatId': formatId,
+        'mediaTitle': mediaTitle,
+        'uploader': uploader,
+        'duration': duration,
         'status': status.name,
         'fileName': fileName,
         'outputPath': outputPath,
@@ -84,6 +95,9 @@ class DownloadTask extends DownloadEntry {
   factory DownloadTask.fromJson(Map<String, dynamic> json) => DownloadTask(
         url: json['url'] as String,
         formatId: json['formatId'] as String?,
+        mediaTitle: json['mediaTitle'] as String?,
+        uploader: json['uploader'] as String?,
+        duration: (json['duration'] as num?)?.toDouble(),
         status: DownloadStatus.values.byName(json['status'] as String),
         fileName: json['fileName'] as String?,
         outputPath: json['outputPath'] as String?,
