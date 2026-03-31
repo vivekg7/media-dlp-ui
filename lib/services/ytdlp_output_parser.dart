@@ -48,6 +48,11 @@ class YtDlpOutputParser {
     r'\[(ExtractAudio|EmbedThumbnail|EmbedSubtitle|SponsorBlock|Metadata|ThumbnailsConvertor|ModifyChapters|Fixup[^\]]*)\]',
   );
 
+  // [info] Writing video thumbnail 1 to: /path/to/file.webp
+  static final _thumbnailWriteRegex = RegExp(
+    r'\[info\]\s+Writing video thumbnail\s+\d+\s+to:\s+(.+)$',
+  );
+
   // WARNING: ...
   static final _warningRegex = RegExp(
     r'WARNING:\s+(.+)',
@@ -159,6 +164,16 @@ class YtDlpOutputParser {
     if (_postProcessRegex.hasMatch(trimmed)) {
       return ParsedLine(
         type: ParsedLineType.postProcess,
+        message: trimmed,
+      );
+    }
+
+    // Thumbnail write (temp file to track for cleanup)
+    final thumbMatch = _thumbnailWriteRegex.firstMatch(trimmed);
+    if (thumbMatch != null) {
+      return ParsedLine(
+        type: ParsedLineType.tempFile,
+        destinationPath: thumbMatch.group(1),
         message: trimmed,
       );
     }

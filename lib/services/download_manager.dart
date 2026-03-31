@@ -225,9 +225,13 @@ class DownloadManager extends ChangeNotifier {
   /// files cleaned up.
   void remove(DownloadEntry entry, {bool deleteFile = false}) {
     if (entry.isActive) return;
-    final isIncomplete = entry.status != DownloadStatus.completed;
-    if (isIncomplete || deleteFile) {
+    if (entry.status != DownloadStatus.completed) {
+      // Incomplete: clean up all files (output, intermediate streams, .part, .ytdl)
       _deleteFiles(entry);
+    } else if (deleteFile) {
+      // Completed + user chose to delete: only need the final output
+      // (yt-dlp cleans intermediates on success)
+      _deleteOutputFiles(entry);
     }
     _entries.remove(entry);
     notifyListeners();
@@ -240,7 +244,7 @@ class DownloadManager extends ChangeNotifier {
     _saveHistory();
   }
 
-  void _deleteFiles(DownloadEntry entry) {
+  void _deleteOutputFiles(DownloadEntry entry) {
     if (entry is DownloadTask) {
       _tryDeleteFile(entry.outputPath);
     } else if (entry is PlaylistDownloadTask) {
@@ -250,12 +254,46 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
+  void _deleteFiles(DownloadEntry entry) {
+    final isIncomplete = entry.status != DownloadStatus.completed;
+    if (entry is DownloadTask) {
+      _cleanupTask(entry, deleteOutput: true, deleteTemp: isIncomplete);
+    } else if (entry is PlaylistDownloadTask) {
+      for (final item in entry.items) {
+        _cleanupTask(item, deleteOutput: true, deleteTemp: isIncomplete);
+      }
+    }
+  }
+
+  /// Clean up files for a single task.
+  /// [deleteOutput] removes the final output file.
+  /// [deleteTemp] removes intermediate stream files and temp files
+  /// (streams, thumbnails, .part/.ytdl variants).
+  static void _cleanupTask(
+    DownloadTask task, {
+    required bool deleteOutput,
+    required bool deleteTemp,
+  }) {
+    if (deleteTemp) {
+      for (final path in task.tempPaths) {
+        if (path == task.outputPath) continue;
+        _tryDeleteFile(path);
+      }
+    }
+    if (deleteOutput) {
+      _tryDeleteFile(task.outputPath);
+    }
+  }
+
+  /// Delete a file and its yt-dlp temp variants (.part, .ytdl).
   static void _tryDeleteFile(String? path) {
     if (path == null) return;
-    try {
-      final file = File(path);
-      if (file.existsSync()) file.deleteSync();
-    } catch (_) {}
+    for (final suffix in ['', '.part', '.ytdl']) {
+      try {
+        final file = File('$path$suffix');
+        if (file.existsSync()) file.deleteSync();
+      } catch (_) {}
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -358,8 +396,9 @@ class DownloadManager extends ChangeNotifier {
         task.progress = parsed.progress;
         notifyListeners();
       case ParsedLineType.destination:
-        task.outputPath = parsed.destinationPath;
         if (parsed.destinationPath != null) {
+          task.tempPaths.add(parsed.destinationPath!);
+          task.outputPath = parsed.destinationPath;
           task.fileName =
               parsed.destinationPath!.split(Platform.pathSeparator).last;
         }
@@ -374,10 +413,15 @@ class DownloadManager extends ChangeNotifier {
       case ParsedLineType.merging:
       case ParsedLineType.postProcess:
         if (parsed.destinationPath != null) {
+          task.tempPaths.add(parsed.destinationPath!);
           task.outputPath = parsed.destinationPath;
           task.fileName =
               parsed.destinationPath!.split(Platform.pathSeparator).last;
           notifyListeners();
+        }
+      case ParsedLineType.tempFile:
+        if (parsed.destinationPath != null) {
+          task.tempPaths.add(parsed.destinationPath!);
         }
       case ParsedLineType.error:
         task.error = parsed.message;
@@ -513,12 +557,11 @@ class DownloadManager extends ChangeNotifier {
         }
 
       case ParsedLineType.destination:
-        if (currentItem != null) {
+        if (currentItem != null && parsed.destinationPath != null) {
+          currentItem.tempPaths.add(parsed.destinationPath!);
           currentItem.outputPath = parsed.destinationPath;
-          if (parsed.destinationPath != null) {
-            currentItem.fileName =
-                parsed.destinationPath!.split(Platform.pathSeparator).last;
-          }
+          currentItem.fileName =
+              parsed.destinationPath!.split(Platform.pathSeparator).last;
           notifyListeners();
         }
 
@@ -537,10 +580,16 @@ class DownloadManager extends ChangeNotifier {
       case ParsedLineType.merging:
       case ParsedLineType.postProcess:
         if (currentItem != null && parsed.destinationPath != null) {
+          currentItem.tempPaths.add(parsed.destinationPath!);
           currentItem.outputPath = parsed.destinationPath;
           currentItem.fileName =
               parsed.destinationPath!.split(Platform.pathSeparator).last;
           notifyListeners();
+        }
+
+      case ParsedLineType.tempFile:
+        if (currentItem != null && parsed.destinationPath != null) {
+          currentItem.tempPaths.add(parsed.destinationPath!);
         }
 
       case ParsedLineType.error:

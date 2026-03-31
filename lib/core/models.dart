@@ -60,6 +60,10 @@ class DownloadTask extends DownloadEntry {
   @override
   String? error;
 
+  /// All file paths seen during download (intermediate streams, temp files).
+  /// Not serialized — only populated during the active download session.
+  final Set<String> tempPaths = {};
+
   @override
   bool get isActive =>
       status == DownloadStatus.queued || status == DownloadStatus.downloading;
@@ -390,6 +394,7 @@ enum ParsedLineType {
   destination,
   alreadyDownloaded,
   playlistItem,
+  tempFile,
   other,
 }
 
