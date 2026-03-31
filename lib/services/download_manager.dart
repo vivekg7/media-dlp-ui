@@ -83,6 +83,7 @@ class DownloadManager extends ChangeNotifier {
     String? formatId,
     bool isAudioOnly = false,
     MediaInfo? mediaInfo,
+    bool? embedSubs,
   }) async {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
@@ -95,6 +96,7 @@ class DownloadManager extends ChangeNotifier {
       mediaTitle: mediaInfo?.title,
       uploader: mediaInfo?.uploader,
       duration: mediaInfo?.duration,
+      embedSubsOverride: embedSubs,
     );
     _entries.insert(0, task);
     notifyListeners();
@@ -354,7 +356,7 @@ class DownloadManager extends ChangeNotifier {
       final args = [
         '--newline',
         '-o', '$outDir/$template',
-        ..._settingsArgs,
+        ..._settingsArgs(embedSubs: task.embedSubsOverride),
         if (needsAudioExtract) ...['-x', '--audio-format', settings.audioFormat],
         if (task.formatId != null) ...['-f', task.formatId!],
         task.url,
@@ -460,7 +462,7 @@ class DownloadManager extends ChangeNotifier {
         '--newline',
         '-o',
         '$outDir/$template',
-        ..._settingsArgs,
+        ..._settingsArgs(),
         if (playlist.selectedIndices != null)
           ...['--playlist-items', playlist.selectedIndices!.join(',')],
         if (playlist.formatId != null) ...['-f', playlist.formatId!],
@@ -617,11 +619,13 @@ class DownloadManager extends ChangeNotifier {
   }
 
   /// Returns common args from settings (post-processing, cookies).
-  List<String> get _settingsArgs {
+  /// [embedSubs] overrides the global subtitle setting when non-null.
+  List<String> _settingsArgs({bool? embedSubs}) {
+    final subs = embedSubs ?? settings.embedSubs;
     return [
       if (settings.embedThumbnail) '--embed-thumbnail',
       if (settings.embedMetadata) '--embed-metadata',
-      if (settings.embedSubs) ...[
+      if (subs) ...[
         '--embed-subs',
         '--sub-langs', settings.subLangs,
         '--postprocessor-args', 'ffmpeg:-disposition:s:0 default',

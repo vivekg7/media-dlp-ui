@@ -101,7 +101,8 @@ class _DownloadPageState extends State<DownloadPage> {
         final error = await _dm.download(url,
             formatId: selection.formatId,
             isAudioOnly: selection.isAudioOnly,
-            mediaInfo: result.mediaInfo);
+            mediaInfo: result.mediaInfo,
+            embedSubs: selection.embedSubs);
         if (error != null && mounted) _showError(error);
       }
     } catch (e) {

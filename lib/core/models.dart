@@ -39,6 +39,7 @@ class DownloadTask extends DownloadEntry {
     this.mediaTitle,
     this.uploader,
     this.duration,
+    this.embedSubsOverride,
     this.status = DownloadStatus.queued,
     this.progress,
     this.fileName,
@@ -56,6 +57,9 @@ class DownloadTask extends DownloadEntry {
   final String? mediaTitle;
   final String? uploader;
   final double? duration;
+
+  /// Per-download override for subtitle embedding. Null means use global setting.
+  final bool? embedSubsOverride;
   @override
   final DateTime createdAt;
   @override

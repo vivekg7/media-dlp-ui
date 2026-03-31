@@ -4,9 +4,15 @@ import 'package:media_dl/core/settings_notifier.dart';
 
 /// Result from the format selection sheet.
 class FormatSelection {
-  const FormatSelection({this.formatId, this.isAudioOnly = false});
+  const FormatSelection({
+    this.formatId,
+    this.isAudioOnly = false,
+    this.embedSubs,
+  });
   final String? formatId;
   final bool isAudioOnly;
+  /// Override for subtitle embedding. Null means use global setting.
+  final bool? embedSubs;
 }
 
 /// Shows a bottom sheet with media info and format picker.
@@ -35,6 +41,13 @@ class _FormatSheet extends StatefulWidget {
 
 class _FormatSheetState extends State<_FormatSheet> {
   String? _selectedFormatId;
+  late bool _embedSubs;
+
+  @override
+  void initState() {
+    super.initState();
+    _embedSubs = widget.settings.embedSubs;
+  }
 
   MediaInfo get info => widget.info;
   SettingsNotifier get settings => widget.settings;
@@ -141,6 +154,25 @@ class _FormatSheetState extends State<_FormatSheet> {
 
             const Divider(height: 1),
 
+            // Subtitle toggle
+            if (!_audioOnly)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: SwitchListTile(
+                  dense: true,
+                  secondary: const Icon(Icons.subtitles_outlined, size: 20),
+                  title: Text('Subtitles',
+                      style: theme.textTheme.bodyMedium),
+                  subtitle: _embedSubs
+                      ? Text(settings.subLangs,
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.outline))
+                      : null,
+                  value: _embedSubs,
+                  onChanged: (v) => setState(() => _embedSubs = v),
+                ),
+              ),
+
             // Format list
             Expanded(
               child: ListView(
@@ -207,6 +239,9 @@ class _FormatSheetState extends State<_FormatSheet> {
                       FormatSelection(
                         formatId: _selectedFormatId,
                         isAudioOnly: isAudio,
+                        embedSubs: _embedSubs != settings.embedSubs
+                            ? _embedSubs
+                            : null,
                       ),
                     );
                   },
@@ -244,10 +279,6 @@ class _FormatSheetState extends State<_FormatSheet> {
     }
     if (settings.embedMetadata) {
       chips.add(_settingsChip(theme, Icons.info_outline, 'Metadata'));
-    }
-    if (settings.embedSubs) {
-      chips.add(_settingsChip(
-          theme, Icons.subtitles_outlined, 'Subs (${settings.subLangs})'));
     }
     if (settings.sponsorBlock) {
       chips.add(_settingsChip(theme, Icons.block, 'SponsorBlock'));
