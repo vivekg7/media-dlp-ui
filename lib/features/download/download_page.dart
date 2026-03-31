@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:media_dl/core/models.dart';
 import 'package:media_dl/core/settings_notifier.dart';
@@ -117,6 +119,57 @@ class _DownloadPageState extends State<DownloadPage> {
     if (error != null && mounted) _showError(error);
   }
 
+  void _confirmRemove(BuildContext context, DownloadEntry entry) {
+    // For incomplete downloads, just remove (partial files cleaned up automatically)
+    if (entry.status != DownloadStatus.completed) {
+      _dm.remove(entry);
+      return;
+    }
+
+    // For completed downloads, check if file exists and offer to delete
+    final hasFile = switch (entry) {
+      DownloadTask task =>
+        task.outputPath != null && File(task.outputPath!).existsSync(),
+      PlaylistDownloadTask pl =>
+        pl.items.any((i) => i.outputPath != null && File(i.outputPath!).existsSync()),
+    };
+
+    if (!hasFile) {
+      _dm.remove(entry);
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove download'),
+        content: const Text('Also delete the file from device?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+            },
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              _dm.remove(entry, deleteFile: true);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Delete file'),
+          ),
+          FilledButton(
+            onPressed: () {
+              _dm.remove(entry);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Keep file'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -228,7 +281,8 @@ class _DownloadPageState extends State<DownloadPage> {
                                 onPause: () => _dm.pause(task),
                                 onResume: () => _dm.resume(task),
                                 onRetry: () => _dm.retry(task),
-                                onRemove: () => _dm.remove(task),
+                                onRemove: () =>
+                                    _confirmRemove(context, task),
                               ),
                             PlaylistDownloadTask playlist =>
                               _PlaylistCard(
@@ -237,7 +291,8 @@ class _DownloadPageState extends State<DownloadPage> {
                                 onPause: () => _dm.pause(playlist),
                                 onResume: () => _dm.resume(playlist),
                                 onRetry: () => _dm.retry(playlist),
-                                onRemove: () => _dm.remove(playlist),
+                                onRemove: () =>
+                                    _confirmRemove(context, playlist),
                               ),
                           };
                         },
@@ -344,12 +399,17 @@ class _DownloadCard extends StatelessWidget {
                       style: theme.textTheme.bodySmall)
                   : _progressText(theme, task.progress),
             ],
-            if (task.status == DownloadStatus.completed &&
-                task.fileSize != null) ...[
+            if (task.status == DownloadStatus.completed) ...[
               const SizedBox(height: 4),
-              Text(task.fileSize!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: colorScheme.outline)),
+              if (task.outputPath != null &&
+                  !File(task.outputPath!).existsSync())
+                Text('File not found',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: colorScheme.error))
+              else if (task.fileSize != null)
+                Text(task.fileSize!,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: colorScheme.outline)),
             ],
             if (task.status == DownloadStatus.failed &&
                 task.error != null) ...[
@@ -683,6 +743,20 @@ class _PlaylistItemRow extends StatelessWidget {
                 '${item.progress!.percent.toStringAsFixed(0)}%',
                 style: theme.textTheme.labelSmall,
               ),
+            ),
+          if (item.status == DownloadStatus.completed)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: item.outputPath != null &&
+                      !File(item.outputPath!).existsSync()
+                  ? Text('Not found',
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: colorScheme.error))
+                  : item.fileSize != null
+                      ? Text(item.fileSize!,
+                          style: theme.textTheme.labelSmall
+                              ?.copyWith(color: colorScheme.outline))
+                      : const SizedBox.shrink(),
             ),
         ],
       ),

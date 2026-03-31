@@ -27,14 +27,25 @@ class YtDlpOutputParser {
     r'\[download\]\s+(.+)\s+has already been downloaded',
   );
 
-  // [Merger] Merging formats into ...
+  // [Merger] Merging formats into "/path/to/file.mkv"
   static final _mergingRegex = RegExp(
+    r'\[Merger\]\s+Merging formats into\s+"(.+)"',
+  );
+
+  // Fallback for other [Merger] lines
+  static final _mergingFallbackRegex = RegExp(
     r'\[Merger\]',
+  );
+
+  // [ExtractAudio] Destination: /path/to/file.mp3
+  // Post-processing that produces a new file destination.
+  static final _postProcessDestRegex = RegExp(
+    r'\[(ExtractAudio|Fixup[^\]]*)\]\s+Destination:\s+(.+)$',
   );
 
   // [ExtractAudio], [EmbedThumbnail], [SponsorBlock], etc.
   static final _postProcessRegex = RegExp(
-    r'\[(ExtractAudio|EmbedThumbnail|EmbedSubtitle|SponsorBlock|Metadata|ThumbnailsConvertor|ModifyChapters)\]',
+    r'\[(ExtractAudio|EmbedThumbnail|EmbedSubtitle|SponsorBlock|Metadata|ThumbnailsConvertor|ModifyChapters|Fixup[^\]]*)\]',
   );
 
   // WARNING: ...
@@ -118,15 +129,33 @@ class YtDlpOutputParser {
       );
     }
 
-    // Merging
-    if (_mergingRegex.hasMatch(trimmed)) {
+    // Merging (with path extraction)
+    final mergeMatch = _mergingRegex.firstMatch(trimmed);
+    if (mergeMatch != null) {
+      return ParsedLine(
+        type: ParsedLineType.merging,
+        destinationPath: mergeMatch.group(1),
+        message: trimmed,
+      );
+    }
+    if (_mergingFallbackRegex.hasMatch(trimmed)) {
       return ParsedLine(
         type: ParsedLineType.merging,
         message: trimmed,
       );
     }
 
-    // Post-processing
+    // Post-processing with destination (e.g. [ExtractAudio] Destination: ...)
+    final ppDestMatch = _postProcessDestRegex.firstMatch(trimmed);
+    if (ppDestMatch != null) {
+      return ParsedLine(
+        type: ParsedLineType.postProcess,
+        destinationPath: ppDestMatch.group(2),
+        message: trimmed,
+      );
+    }
+
+    // Post-processing (generic)
     if (_postProcessRegex.hasMatch(trimmed)) {
       return ParsedLine(
         type: ParsedLineType.postProcess,

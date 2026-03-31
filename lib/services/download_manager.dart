@@ -220,18 +220,42 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
-  void remove(DownloadEntry entry) {
-    if (!entry.isActive) {
-      _entries.remove(entry);
-      notifyListeners();
-      _saveHistory();
+  /// Remove a download entry. If [deleteFile] is true, also delete the
+  /// file(s) from disk. Incomplete downloads always have their partial
+  /// files cleaned up.
+  void remove(DownloadEntry entry, {bool deleteFile = false}) {
+    if (entry.isActive) return;
+    final isIncomplete = entry.status != DownloadStatus.completed;
+    if (isIncomplete || deleteFile) {
+      _deleteFiles(entry);
     }
+    _entries.remove(entry);
+    notifyListeners();
+    _saveHistory();
   }
 
   void clearCompleted() {
     _entries.removeWhere((e) => e.status == DownloadStatus.completed);
     notifyListeners();
     _saveHistory();
+  }
+
+  void _deleteFiles(DownloadEntry entry) {
+    if (entry is DownloadTask) {
+      _tryDeleteFile(entry.outputPath);
+    } else if (entry is PlaylistDownloadTask) {
+      for (final item in entry.items) {
+        _tryDeleteFile(item.outputPath);
+      }
+    }
+  }
+
+  static void _tryDeleteFile(String? path) {
+    if (path == null) return;
+    try {
+      final file = File(path);
+      if (file.existsSync()) file.deleteSync();
+    } catch (_) {}
   }
 
   // ---------------------------------------------------------------------------
@@ -307,7 +331,8 @@ class DownloadManager extends ChangeNotifier {
 
       if (exitCode == 0) {
         task.status = DownloadStatus.completed;
-        task.fileSize ??= task.progress?.totalSize;
+        task.fileSize = await _readFileSize(task.outputPath)
+            ?? task.progress?.totalSize;
         task.progress = const DownloadProgress(percent: 100.0);
         _notifications.downloadComplete(task.fileName ?? task.url);
       } else {
@@ -346,6 +371,14 @@ class DownloadManager extends ChangeNotifier {
               parsed.destinationPath!.split(Platform.pathSeparator).last;
         }
         notifyListeners();
+      case ParsedLineType.merging:
+      case ParsedLineType.postProcess:
+        if (parsed.destinationPath != null) {
+          task.outputPath = parsed.destinationPath;
+          task.fileName =
+              parsed.destinationPath!.split(Platform.pathSeparator).last;
+          notifyListeners();
+        }
       case ParsedLineType.error:
         task.error = parsed.message;
       default:
@@ -405,12 +438,15 @@ class DownloadManager extends ChangeNotifier {
       }
 
       if (exitCode == 0) {
-        // Mark any remaining items as completed
+        // Mark any remaining items as completed and read actual file sizes
         for (final item in playlist.items) {
           if (item.status == DownloadStatus.downloading) {
             item.status = DownloadStatus.completed;
-            item.fileSize ??= item.progress?.totalSize;
             item.progress = const DownloadProgress(percent: 100.0);
+          }
+          if (item.status == DownloadStatus.completed) {
+            item.fileSize = await _readFileSize(item.outputPath)
+                ?? item.progress?.totalSize;
           }
         }
         playlist.status = DownloadStatus.completed;
@@ -460,7 +496,6 @@ class DownloadManager extends ChangeNotifier {
           final prev = playlist.items[playlist.currentItemIndex];
           if (prev.status == DownloadStatus.downloading) {
             prev.status = DownloadStatus.completed;
-            prev.fileSize ??= prev.progress?.totalSize;
             prev.progress = const DownloadProgress(percent: 100.0);
           }
         }
@@ -495,8 +530,16 @@ class DownloadManager extends ChangeNotifier {
                 parsed.destinationPath!.split(Platform.pathSeparator).last;
           }
           currentItem.status = DownloadStatus.completed;
-          currentItem.fileSize ??= currentItem.progress?.totalSize;
           currentItem.progress = const DownloadProgress(percent: 100.0);
+          notifyListeners();
+        }
+
+      case ParsedLineType.merging:
+      case ParsedLineType.postProcess:
+        if (currentItem != null && parsed.destinationPath != null) {
+          currentItem.outputPath = parsed.destinationPath;
+          currentItem.fileName =
+              parsed.destinationPath!.split(Platform.pathSeparator).last;
           notifyListeners();
         }
 
@@ -542,6 +585,28 @@ class DownloadManager extends ChangeNotifier {
         '--source-address', settings.sourceAddress!,
       ],
     ];
+  }
+
+  /// Read the actual file size from disk and return a human-readable string.
+  Future<String?> _readFileSize(String? path) async {
+    if (path == null) return null;
+    try {
+      final file = File(path);
+      if (!await file.exists()) return null;
+      final bytes = await file.length();
+      return _formatBytes(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KiB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MiB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GiB';
   }
 
   Future<void> _ensureOutputDir() async {
